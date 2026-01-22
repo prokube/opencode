@@ -1,9 +1,10 @@
-import { createResource, For, Show, onMount } from "solid-js"
+import { createResource, For, Show, onMount, createEffect } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "../context/base-path"
 import { base64Encode } from "../utils/path"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Button } from "@opencode-ai/ui/button"
 
 interface Project {
   id: string
@@ -11,6 +12,9 @@ interface Project {
   name?: string
   time?: { created: number; updated: number }
 }
+
+// Default directory for Kubeflow notebooks
+const DEFAULT_DIRECTORY = "/home/jovyan"
 
 export function ProjectPicker() {
   const { serverUrl } = useBasePath()
@@ -37,16 +41,30 @@ export function ProjectPicker() {
     }
   })
 
-  // Auto-navigate to current project once loaded
-  onMount(() => {
-    const checkAndNavigate = () => {
-      const current = currentProject()
-      if (current?.worktree) {
-        navigate(`/${base64Encode(current.worktree)}/session`, { replace: true })
-      }
+  // Auto-navigate once resources are loaded
+  createEffect(() => {
+    // Wait for both resources to finish loading
+    if (projects.loading || currentProject.loading) return
+
+    const projectList = projects() ?? []
+    const current = currentProject()
+
+    // If we have a current project, navigate to it
+    if (current?.worktree) {
+      navigate(`/${base64Encode(current.worktree)}/session`, { replace: true })
+      return
     }
-    // Check after resources load
-    setTimeout(checkAndNavigate, 100)
+
+    // If we have projects, navigate to the most recently updated one
+    if (projectList.length > 0) {
+      const sorted = [...projectList].sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+      navigate(`/${base64Encode(sorted[0].worktree)}/session`, { replace: true })
+      return
+    }
+
+    // No projects found - in Kubeflow context, auto-navigate to default directory
+    // This will create a new project for /home/jovyan
+    navigate(`/${base64Encode(DEFAULT_DIRECTORY)}/session`, { replace: true })
   })
 
   function selectProject(worktree: string) {
@@ -81,15 +99,14 @@ export function ProjectPicker() {
           <Show
             when={projects()?.length}
             fallback={
-              <div class="text-center py-8" style={{ color: "var(--text-weak)" }}>
-                <p>No projects found.</p>
-                <p class="text-sm mt-2">
-                  Run{" "}
-                  <code class="px-1 rounded" style={{ background: "var(--surface-inset)" }}>
-                    opencode
-                  </code>{" "}
-                  in a project directory.
-                </p>
+              <div class="text-center py-8">
+                <div class="mb-4" style={{ color: "var(--text-weak)" }}>
+                  <p>No projects found.</p>
+                  <p class="text-sm mt-2">Redirecting to home directory...</p>
+                </div>
+                <Button onClick={() => selectProject(DEFAULT_DIRECTORY)} variant="primary">
+                  Open Home Directory
+                </Button>
               </div>
             }
           >
