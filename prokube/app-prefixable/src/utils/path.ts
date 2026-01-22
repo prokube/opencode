@@ -59,9 +59,12 @@ export function getServerUrl(): string {
   if (typeof window !== "undefined" && window.__OPENCODE__?.serverUrl) {
     return window.__OPENCODE__.serverUrl
   }
-  // Default to same origin
+  // Default to same origin + base path (so SDK requests go through our proxy)
   if (typeof window !== "undefined") {
-    return window.location.origin
+    const basePath = getBasePath()
+    // Remove trailing slash for server URL
+    const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath
+    return window.location.origin + base
   }
   return "http://localhost:4096"
 }
