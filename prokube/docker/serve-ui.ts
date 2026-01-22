@@ -7,24 +7,20 @@
  * 3. Injects NB_PREFIX into index.html at runtime
  */
 
-const BASE_PATH = process.env.NB_PREFIX || process.env.BASE_PATH || "/";
-const PORT = parseInt(process.env.PORT || "8888", 10);
-const API_URL = process.env.API_URL || "http://127.0.0.1:4096";
-const DIST_DIR = process.env.DIST_DIR || "/opt/opencode-ui/dist";
+const BASE_PATH = process.env.NB_PREFIX || process.env.BASE_PATH || "/"
+const PORT = parseInt(process.env.PORT || "8888", 10)
+const API_URL = process.env.API_URL || "http://127.0.0.1:4096"
+const DIST_DIR = process.env.DIST_DIR || "/opt/opencode-ui/dist"
 
-console.log(`OpenCode UI Server starting...`);
-console.log(`  BASE_PATH: ${BASE_PATH}`);
-console.log(`  API_URL: ${API_URL}`);
-console.log(`  PORT: ${PORT}`);
-console.log(`  DIST_DIR: ${DIST_DIR}`);
+console.log(`OpenCode UI Server starting...`)
+console.log(`  BASE_PATH: ${BASE_PATH}`)
+console.log(`  API_URL: ${API_URL}`)
+console.log(`  PORT: ${PORT}`)
+console.log(`  DIST_DIR: ${DIST_DIR}`)
 
 // Normalize base path
-const basePathWithoutTrailing = BASE_PATH.endsWith("/")
-  ? BASE_PATH.slice(0, -1)
-  : BASE_PATH;
-const basePathWithTrailing = BASE_PATH.endsWith("/")
-  ? BASE_PATH
-  : BASE_PATH + "/";
+const basePathWithoutTrailing = BASE_PATH.endsWith("/") ? BASE_PATH.slice(0, -1) : BASE_PATH
+const basePathWithTrailing = BASE_PATH.endsWith("/") ? BASE_PATH : BASE_PATH + "/"
 
 // MIME types for static files
 const mimeTypes: Record<string, string> = {
@@ -44,7 +40,7 @@ const mimeTypes: Record<string, string> = {
   ttf: "font/ttf",
   eot: "application/vnd.ms-fontobject",
   map: "application/json",
-};
+}
 
 // API paths that should be proxied to the OpenCode API server
 const apiPaths = [
@@ -70,12 +66,10 @@ const apiPaths = [
   "/formatter",
   "/doc",
   "/log",
-];
+]
 
 function isApiPath(path: string): boolean {
-  return apiPaths.some(
-    (p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"),
-  );
+  return apiPaths.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))
 }
 
 const server = Bun.serve({
@@ -84,30 +78,34 @@ const server = Bun.serve({
   idleTimeout: 0, // Disable timeout for SSE connections
 
   async fetch(req) {
-    const url = new URL(req.url);
-    const path = url.pathname;
+    const url = new URL(req.url)
+    let path = url.pathname
 
-    // Check if this is an API request
+    // Strip base path prefix if present
+    if (basePathWithoutTrailing && path.startsWith(basePathWithoutTrailing)) {
+      path = path.slice(basePathWithoutTrailing.length) || "/"
+    }
+    if (!path.startsWith("/")) {
+      path = "/" + path
+    }
+
+    // Check if this is an API request (after stripping prefix)
     if (isApiPath(path)) {
-      const target = new URL(path + url.search, API_URL);
-      const headers = new Headers(req.headers);
+      const target = new URL(path + url.search, API_URL)
+      const headers = new Headers(req.headers)
 
       // SSE requests need special handling
       if (path.startsWith("/event")) {
-        console.log("[Proxy] SSE request to:", target.toString());
+        console.log("[Proxy] SSE request to:", target.toString())
         try {
           const response = await fetch(target.toString(), {
             method: req.method,
             headers,
-          });
+          })
 
           if (!response.ok) {
-            console.error(
-              "[Proxy] SSE error:",
-              response.status,
-              response.statusText,
-            );
-            return new Response(response.body, { status: response.status });
+            console.error("[Proxy] SSE error:", response.status, response.statusText)
+            return new Response(response.body, { status: response.status })
           }
 
           return new Response(response.body, {
@@ -118,43 +116,35 @@ const server = Bun.serve({
               Connection: "keep-alive",
               "X-Accel-Buffering": "no",
             },
-          });
+          })
         } catch (e) {
-          console.error("[Proxy] SSE connection error:", e);
-          return new Response("SSE proxy error", { status: 502 });
+          console.error("[Proxy] SSE connection error:", e)
+          return new Response("SSE proxy error", { status: 502 })
         }
       }
 
       // Regular API requests
-      console.log("[Proxy] API:", req.method, path);
+      console.log("[Proxy] API:", req.method, path)
       try {
         return await fetch(target.toString(), {
           method: req.method,
           headers,
           body: req.body,
-        });
+        })
       } catch (e) {
-        console.error("[Proxy] API error:", e);
-        return new Response("API proxy error", { status: 502 });
+        console.error("[Proxy] API error:", e)
+        return new Response("API proxy error", { status: 502 })
       }
     }
 
-    // Frontend routes - strip base path prefix for file lookup
-    let strippedPath = path;
-    if (basePathWithoutTrailing && path.startsWith(basePathWithoutTrailing)) {
-      strippedPath = path.slice(basePathWithoutTrailing.length) || "/";
-    }
-    if (!strippedPath.startsWith("/")) {
-      strippedPath = "/" + strippedPath;
-    }
-
+    // Frontend routes - path is already stripped above
     // Try to serve static file
-    const filePath = `${DIST_DIR}${strippedPath}`;
-    const file = Bun.file(filePath);
+    const filePath = `${DIST_DIR}${path}`
+    const file = Bun.file(filePath)
 
     if (await file.exists()) {
-      const ext = strippedPath.split(".").pop()?.toLowerCase() || "";
-      const contentType = mimeTypes[ext] || "application/octet-stream";
+      const ext = path.split(".").pop()?.toLowerCase() || ""
+      const contentType = mimeTypes[ext] || "application/octet-stream"
 
       return new Response(file, {
         headers: {
@@ -164,36 +154,34 @@ const server = Bun.serve({
             "Cache-Control": "public, max-age=31536000, immutable",
           }),
         },
-      });
+      })
     }
 
     // SPA fallback - serve index.html with injected base path
-    const indexPath = `${DIST_DIR}/index.html`;
-    const indexFile = Bun.file(indexPath);
+    const indexPath = `${DIST_DIR}/index.html`
+    const indexFile = Bun.file(indexPath)
 
     if (!(await indexFile.exists())) {
-      console.error("index.html not found at:", indexPath);
-      return new Response("Not Found", { status: 404 });
+      console.error("index.html not found at:", indexPath)
+      return new Response("Not Found", { status: 404 })
     }
 
-    const indexHtml = await indexFile.text();
-    const injected = indexHtml
-      .replace('<base href="/" />', `<base href="${basePathWithTrailing}" />`)
-      .replace(
-        "window.__OPENCODE__ = window.__OPENCODE__ || {}",
-        `window.__OPENCODE__ = { basePath: "${basePathWithTrailing}", serverUrl: "${API_URL}" }`,
-      );
+    const indexHtml = await indexFile.text()
+    const injected = indexHtml.replace('<base href="/" />', `<base href="${basePathWithTrailing}" />`).replace(
+      "window.__OPENCODE__ = window.__OPENCODE__ || {}",
+      // Don't set serverUrl - let the browser use window.location.origin
+      // API requests will be proxied through this server
+      `window.__OPENCODE__ = { basePath: "${basePathWithTrailing}" }`,
+    )
 
     return new Response(injected, {
       headers: {
         "Content-Type": "text/html",
         "Cache-Control": "no-cache",
       },
-    });
+    })
   },
-});
+})
 
-console.log(
-  `\nOpenCode UI Server running at http://0.0.0.0:${PORT}${basePathWithTrailing}`,
-);
-console.log(`Proxying API requests to ${API_URL}`);
+console.log(`\nOpenCode UI Server running at http://0.0.0.0:${PORT}${basePathWithTrailing}`)
+console.log(`Proxying API requests to ${API_URL}`)

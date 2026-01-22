@@ -1,6 +1,7 @@
 import { createContext, useContext, onCleanup, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Event, SessionStatus } from "@opencode-ai/sdk/v2/client"
+import { useBasePath } from "./base-path"
 
 type EventHandler = (event: Event) => void
 
@@ -12,19 +13,21 @@ interface EventContextValue {
 const EventContext = createContext<EventContextValue>()
 
 export function EventProvider(props: ParentProps) {
+  const { prefix } = useBasePath()
   const handlers = new Set<EventHandler>()
   const [status, setStatus] = createStore<Record<string, SessionStatus>>({})
 
-  // Connect to SSE endpoint - use relative URL so it goes through the proxy
+  // Connect to SSE endpoint
   let eventSource: EventSource | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
   function connect() {
     if (eventSource) return
 
-    // Use relative path - the dev server will proxy this
-    eventSource = new EventSource("/event")
-    console.log("[Events] Connecting to SSE...")
+    // Use prefixed path so it goes through the proxy correctly
+    const eventUrl = prefix("/event")
+    eventSource = new EventSource(eventUrl)
+    console.log("[Events] Connecting to SSE:", eventUrl)
 
     eventSource.onopen = () => {
       console.log("[Events] Connected")
