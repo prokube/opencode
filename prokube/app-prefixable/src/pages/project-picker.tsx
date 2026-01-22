@@ -35,8 +35,16 @@ export function ProjectPicker() {
   const [projects] = createResource(async () => {
     try {
       const res = await client.project.list()
-      return (res.data as Project[]) ?? []
-    } catch {
+      const data = res.data
+      // Handle both array response and object with nested array
+      if (Array.isArray(data)) return data as Project[]
+      if (data && typeof data === "object" && "projects" in data) {
+        return (data as { projects: Project[] }).projects ?? []
+      }
+      console.warn("[ProjectPicker] Unexpected project.list response:", data)
+      return []
+    } catch (err) {
+      console.warn("[ProjectPicker] Failed to list projects:", err)
       return []
     }
   })
