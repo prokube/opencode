@@ -482,7 +482,7 @@ export function Settings() {
                   Models
                 </h1>
                 <p class="text-sm mt-1" style={{ color: "var(--text-weak)" }}>
-                  Available models from connected providers
+                  Select a default model for new sessions
                 </p>
               </header>
 
@@ -514,19 +514,48 @@ export function Settings() {
                         {provider.name}
                       </h2>
                     </div>
-                    <div class="p-2">
-                      <For each={Object.values(provider.models).slice(0, 10)}>
-                        {(model) => (
-                          <div class="px-3 py-2 rounded-md text-sm" style={{ color: "var(--text-base)" }}>
-                            {model.name}
-                          </div>
-                        )}
+                    <div class="p-2 max-h-96 overflow-y-auto">
+                      <For each={Object.values(provider.models)}>
+                        {(model) => {
+                          const isSelected =
+                            providers.selectedModel?.providerID === provider.id &&
+                            providers.selectedModel?.modelID === model.id
+                          return (
+                            <button
+                              onClick={() => providers.setSelectedModel({ providerID: provider.id, modelID: model.id })}
+                              class="w-full px-3 py-2 rounded-md text-sm text-left transition-colors flex items-center justify-between"
+                              style={{
+                                color: isSelected ? "var(--text-interactive-base)" : "var(--text-base)",
+                                background: isSelected ? "var(--surface-inset)" : "transparent",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) e.currentTarget.style.background = "var(--surface-inset)"
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) e.currentTarget.style.background = "transparent"
+                              }}
+                            >
+                              <span>{model.name}</span>
+                              <Show when={isSelected}>
+                                <svg
+                                  class="w-4 h-4"
+                                  style={{ color: "var(--text-interactive-base)" }}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </svg>
+                              </Show>
+                            </button>
+                          )
+                        }}
                       </For>
-                      <Show when={Object.keys(provider.models).length > 10}>
-                        <div class="px-3 py-2 text-xs" style={{ color: "var(--text-weak)" }}>
-                          +{Object.keys(provider.models).length - 10} more models
-                        </div>
-                      </Show>
                     </div>
                   </section>
                 )}

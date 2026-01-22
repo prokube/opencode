@@ -1,4 +1,4 @@
-import { type ParentProps, createSignal, For, Show, onMount, onCleanup, createResource, createMemo } from "solid-js"
+import { type ParentProps, createSignal, For, Show, onMount, createMemo } from "solid-js"
 import { A, useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "../context/base-path"
@@ -9,12 +9,22 @@ import { base64Encode } from "../utils/path"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 
-interface Project {
-  id: string
-  worktree: string
-  name?: string
-  vcs?: string
-  icon?: { color?: string }
+// Prokube icon (PK logo)
+function PkIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} viewBox="0 0 73.87881 73.87876" xmlns="http://www.w3.org/2000/svg">
+      <path d="m73.87881,0H0v73.87876h73.87881V0h0Z" fill="#08000e" />
+      <rect x="61.72833" y="27.10204" width="5.55266" height="5.55266" fill="#fff" />
+      <path
+        d="m6.59779,67.28097v-34.21636h19.11633c1.07361,0,2.05576.26894,2.94586.80538.89015.53706,1.59612,1.24374,2.11935,2.11935.52256.87621.78415,1.85102.78415,2.92463v12.88551c0,1.07422-.26159,2.04913-.78415,2.92473-.52323.87621-1.2292,1.5828-2.11935,2.11924-.8901.53706-1.87225.80528-2.94586.80528h-13.56367v9.63224h-5.55266Zm6.06129-15.18479h12.8431c.1411,0,.26098-.04899.36028-.1483.0987-.0987.14835-.21862.14835-.36028v-12.46164c0-.14115-.04965-.26098-.14835-.36028-.09931-.0987-.21918-.1484-.36028-.1484h-12.8431c-.14177,0-.26164.0497-.36028.1484-.09936.09931-.14835.21913-.14835.36028v12.46164c0,.14166.04899.26159.14835.36028.09864.09931.21852.1483.36028.1483Z"
+        fill="#fff"
+      />
+      <path
+        d="m34.55118,57.64873V23.43238h5.55266v19.12689h4.36581l8.77398-9.49465h5.93412v1.52595l-9.7913,10.76616,9.74894,10.76616v1.52585h-5.89176l-8.77398-9.49445h-4.36581v9.49445h-5.55266Z"
+        fill="#fff"
+      />
+    </svg>
+  )
 }
 
 export function Layout(props: ParentProps) {
@@ -29,9 +39,7 @@ export function Layout(props: ParentProps) {
   const [sessions, setSessions] = createSignal<Session[]>([])
   const [loading, setLoading] = createSignal(true)
   const [sidebarOpen, setSidebarOpen] = createSignal(true)
-  const [showProjectPicker, setShowProjectPicker] = createSignal(false)
   const [expandedGroups, setExpandedGroups] = createSignal<Record<string, boolean>>({})
-  let projectPickerRef: HTMLDivElement | undefined
 
   // Current directory's base64-encoded slug for URLs
   const dirSlug = createMemo(() => (directory ? base64Encode(directory) : ""))
@@ -95,44 +103,6 @@ export function Layout(props: ParentProps) {
     setExpandedGroups((prev) => ({ ...prev, [dir]: !isGroupExpanded(dir) }))
   }
 
-  // Close project picker on click outside
-  function handleClickOutside(e: MouseEvent) {
-    if (projectPickerRef && !projectPickerRef.contains(e.target as Node)) {
-      setShowProjectPicker(false)
-    }
-  }
-
-  onMount(() => {
-    document.addEventListener("click", handleClickOutside)
-  })
-
-  onCleanup(() => {
-    document.removeEventListener("click", handleClickOutside)
-  })
-
-  // Fetch all projects (global, not directory-specific)
-  const [projects] = createResource(async () => {
-    try {
-      // Use a client without directory for global calls
-      const globalClient = createOpencodeClient({ baseUrl: serverUrl, throwOnError: true })
-      const res = await globalClient.project.list()
-      return (res.data as Project[]) ?? []
-    } catch (e) {
-      console.error("Failed to fetch projects:", e)
-      return []
-    }
-  })
-
-  // Current project based on directory
-  const currentProject = createMemo(() => {
-    const all = projects() || []
-    return all.find((p) => p.worktree === directory)
-  })
-
-  function getProjectName(project: Project): string {
-    return project.name || project.worktree.split("/").pop() || project.worktree
-  }
-
   function getDirName(dir: string): string {
     return dir.split("/").pop() || dir
   }
@@ -194,12 +164,6 @@ export function Layout(props: ParentProps) {
     await createSessionInDirectory(directory)
   }
 
-  function navigateToProject(worktree: string) {
-    const slug = base64Encode(worktree)
-    navigate(`/${slug}/session`)
-    setShowProjectPicker(false)
-  }
-
   function isActive(sessionId: string) {
     return location.pathname.includes(sessionId)
   }
@@ -219,125 +183,12 @@ export function Layout(props: ParentProps) {
           "border-right": "1px solid var(--border-base)",
         }}
       >
-        {/* Logo & Project */}
+        {/* Logo & Collapse */}
         <div class="flex items-center justify-between p-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
-          <Show when={sidebarOpen()}>
-            <div class="flex-1 min-w-0">
-              {/* Project Picker */}
-              <div class="relative" ref={projectPickerRef}>
-                <button
-                  onClick={() => setShowProjectPicker(!showProjectPicker())}
-                  class="flex items-center gap-2 text-sm font-medium w-full text-left rounded-md p-1 -m-1 transition-colors"
-                  style={{ color: "var(--text-strong)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  <div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center shrink-0">
-                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                      />
-                    </svg>
-                  </div>
-                  <span class="truncate">{directory ? getDirName(directory) : "Loading..."}</span>
-                  <svg
-                    class="w-3 h-3 shrink-0"
-                    style={{ color: "var(--icon-weak)" }}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {/* Project Dropdown */}
-                <Show when={showProjectPicker()}>
-                  <div
-                    class="absolute left-0 top-full mt-1 w-72 rounded-lg shadow-lg z-50 overflow-hidden"
-                    style={{
-                      background: "var(--background-base)",
-                      border: "1px solid var(--border-base)",
-                    }}
-                  >
-                    <div
-                      class="px-3 py-2 text-xs font-medium"
-                      style={{
-                        color: "var(--text-weak)",
-                        background: "var(--surface-inset)",
-                        "border-bottom": "1px solid var(--border-base)",
-                      }}
-                    >
-                      Switch Project
-                    </div>
-                    <div class="max-h-64 overflow-y-auto">
-                      <For each={projects()}>
-                        {(project) => {
-                          const isCurrent = project.worktree === directory
-                          return (
-                            <button
-                              onClick={() => navigateToProject(project.worktree)}
-                              class="w-full px-3 py-2 text-sm flex items-center gap-2 transition-colors text-left"
-                              style={{
-                                color: isCurrent ? "var(--text-interactive-base)" : "var(--text-base)",
-                                background: isCurrent ? "var(--surface-inset)" : "transparent",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isCurrent) e.currentTarget.style.background = "var(--surface-inset)"
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isCurrent) e.currentTarget.style.background = "transparent"
-                              }}
-                            >
-                              <svg
-                                class="w-4 h-4 shrink-0"
-                                style={{ color: "var(--icon-weak)" }}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                                />
-                              </svg>
-                              <div class="flex-1 min-w-0">
-                                <div class="truncate font-medium">{getProjectName(project)}</div>
-                                <div class="truncate text-xs" style={{ color: "var(--text-weak)" }}>
-                                  {project.worktree}
-                                </div>
-                              </div>
-                              <Show when={isCurrent}>
-                                <svg
-                                  class="w-4 h-4 shrink-0"
-                                  style={{ color: "var(--text-interactive-base)" }}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
-                              </Show>
-                            </button>
-                          )
-                        }}
-                      </For>
-                    </div>
-                  </div>
-                </Show>
-              </div>
-            </div>
-          </Show>
+          {/* PK Icon */}
+          <div class="shrink-0">
+            <PkIcon class="w-7 h-7 rounded" />
+          </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen())}
             class="p-1.5 rounded transition-colors"
