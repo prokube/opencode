@@ -5,8 +5,66 @@
 /**
  * OpenCode ProKube UI Component Styles
  * 
- * Basiert auf dem pkui Design-System
+ * Basiert auf dem OpenCode Design-System mit CSS-Variablen
  */
+
+@layer base {
+  :root {
+    /* Background colors */
+    --background-base: #ffffff;
+    --background-stronger: #fafafa;
+    --background-strongest: #f4f4f5;
+
+    /* Surface colors */
+    --surface-base: #ffffff;
+    --surface-inset: #f4f4f5;
+    --surface-strong: #e4e4e7;
+
+    /* Text colors */
+    --text-base: #3f3f46;
+    --text-strong: #18181b;
+    --text-weak: #71717a;
+    --text-interactive-base: #7c3aed;
+
+    /* Icon colors */
+    --icon-base: #52525b;
+    --icon-weak: #a1a1aa;
+    --icon-strong: #18181b;
+
+    /* Border colors */
+    --border-base: #e4e4e7;
+    --border-strong: #d4d4d8;
+
+    /* Interactive */
+    --interactive-base: #7c3aed;
+    --interactive-hover: #6d28d9;
+  }
+
+  .dark {
+    --background-base: #18181b;
+    --background-stronger: #09090b;
+    --background-strongest: #27272a;
+
+    --surface-base: #18181b;
+    --surface-inset: #27272a;
+    --surface-strong: #3f3f46;
+
+    --text-base: #a1a1aa;
+    --text-strong: #fafafa;
+    --text-weak: #71717a;
+    --text-interactive-base: #a78bfa;
+
+    --icon-base: #a1a1aa;
+    --icon-weak: #52525b;
+    --icon-strong: #fafafa;
+
+    --border-base: #27272a;
+    --border-strong: #3f3f46;
+
+    --interactive-base: #a78bfa;
+    --interactive-hover: #8b5cf6;
+  }
+}
 
 @layer components {
   /* ============================================

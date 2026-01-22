@@ -18,10 +18,19 @@ export function Home() {
   }
 
   return (
-    <div class="flex flex-col items-center justify-center h-full bg-gray-50">
+    <div class="flex flex-col items-center justify-center h-full" style={{ background: "var(--background-stronger)" }}>
       <div class="text-center max-w-md">
-        <div class="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <svg class="w-10 h-10 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div
+          class="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
+          style={{ background: "var(--surface-inset)" }}
+        >
+          <svg
+            class="w-10 h-10"
+            style={{ color: "var(--text-interactive-base)" }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -30,8 +39,12 @@ export function Home() {
             />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-gray-900 mb-2">Welcome to OpenCode</h1>
-        <p class="text-gray-500 mb-6">Select a session from the sidebar or start a new one.</p>
+        <h1 class="text-2xl font-bold mb-2" style={{ color: "var(--text-strong)" }}>
+          Welcome to OpenCode
+        </h1>
+        <p class="mb-6" style={{ color: "var(--text-weak)" }}>
+          Select a session from the sidebar or start a new one.
+        </p>
         <Button onClick={createNewSession} variant="primary">
           Start New Session
         </Button>

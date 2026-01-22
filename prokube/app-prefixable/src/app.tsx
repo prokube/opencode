@@ -3,6 +3,7 @@ import { BasePathProvider, useBasePath } from "./context/base-path"
 import { SDKProvider } from "./context/sdk"
 import { EventProvider } from "./context/events"
 import { ProviderProvider } from "./context/providers"
+import { CommandProvider } from "./context/command"
 import { Home } from "./pages/home"
 import { Session } from "./pages/session"
 import { Settings } from "./pages/settings"
@@ -27,7 +28,9 @@ export function App() {
       <SDKProvider>
         <EventProvider>
           <ProviderProvider>
-            <AppRoutes />
+            <CommandProvider>
+              <AppRoutes />
+            </CommandProvider>
           </ProviderProvider>
         </EventProvider>
       </SDKProvider>

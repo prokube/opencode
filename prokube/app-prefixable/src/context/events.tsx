@@ -33,13 +33,19 @@ export function EventProvider(props: ParentProps) {
     eventSource.onmessage = (e) => {
       try {
         const wrapper = JSON.parse(e.data) as { directory?: string; payload: Event }
-        const event = wrapper.payload
+        const event = wrapper?.payload
+        if (!event || !event.type) {
+          console.warn("[Events] Received event without type:", wrapper)
+          return
+        }
         console.log("[Events] Received:", event.type)
 
         // Update session status
         if (event.type === "session.status") {
-          const sessionID = event.properties.sessionID
-          setStatus(sessionID, event.properties.status)
+          const props = event.properties
+          if (props?.sessionID && props?.status) {
+            setStatus(props.sessionID, props.status)
+          }
         }
 
         // Notify all handlers

@@ -1,4 +1,4 @@
-import { createSignal, createResource, Show, For, onMount, createEffect } from "solid-js"
+import { createSignal, createResource, Show, For, onMount, createEffect, onCleanup, createMemo } from "solid-js"
 import { useParams, useNavigate } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -7,6 +7,14 @@ import { useEvents } from "../context/events"
 import { useProviders } from "../context/providers"
 import { Markdown } from "../components/markdown"
 import type { Part } from "@opencode-ai/sdk/v2/client"
+
+interface Command {
+  id: string
+  title: string
+  description?: string
+  slash?: string
+  onSelect: () => void
+}
 
 interface DisplayMessage {
   id: string
@@ -35,8 +43,163 @@ export function Session() {
   const [sessionId, setSessionId] = createSignal(params.id)
   const [showModelPicker, setShowModelPicker] = createSignal(false)
   const [showAgentPicker, setShowAgentPicker] = createSignal(false)
+  const [showSlashPopover, setShowSlashPopover] = createSignal(false)
+  const [slashQuery, setSlashQuery] = createSignal("")
+  const [slashIndex, setSlashIndex] = createSignal(0)
   let messagesEndRef: HTMLDivElement | undefined
   let inputRef: HTMLInputElement | undefined
+  let agentPickerRef: HTMLDivElement | undefined
+  let modelPickerRef: HTMLDivElement | undefined
+  let slashPopoverRef: HTMLDivElement | undefined
+
+  // Define slash commands directly (not through context to avoid reactivity issues)
+  const slashCommands: Command[] = [
+    {
+      id: "session.new",
+      title: "New Session",
+      description: "Create a new chat session",
+      slash: "new",
+      onSelect: () => {
+        console.log("[Command] New session")
+        navigate("/session")
+      },
+    },
+    {
+      id: "settings.open",
+      title: "Settings",
+      description: "Open settings page",
+      slash: "settings",
+      onSelect: () => {
+        console.log("[Command] Settings")
+        navigate("/settings")
+      },
+    },
+    {
+      id: "provider.connect",
+      title: "Connect Provider",
+      description: "Add an AI provider",
+      slash: "connect",
+      onSelect: () => {
+        console.log("[Command] Connect")
+        navigate("/settings")
+      },
+    },
+    {
+      id: "model.choose",
+      title: "Choose Model",
+      description: "Select the AI model to use",
+      slash: "model",
+      onSelect: () => {
+        console.log("[Command] Model picker")
+        setShowModelPicker(true)
+      },
+    },
+    {
+      id: "agent.choose",
+      title: "Choose Agent",
+      description: "Select the agent to use",
+      slash: "agent",
+      onSelect: () => {
+        console.log("[Command] Agent picker")
+        setShowAgentPicker(true)
+      },
+    },
+  ]
+
+  // Filtered slash commands based on query
+  const filteredSlashCommands = createMemo(() => {
+    const q = slashQuery().toLowerCase()
+    if (!q) return slashCommands
+    return slashCommands.filter(
+      (c) =>
+        c.slash?.toLowerCase().startsWith(q) ||
+        c.title.toLowerCase().includes(q) ||
+        c.description?.toLowerCase().includes(q),
+    )
+  })
+
+  // Close dropdowns on click outside
+  function handleClickOutside(e: MouseEvent) {
+    const target = e.target as Node
+
+    // Don't close if clicking inside the input (for slash commands)
+    if (inputRef?.contains(target)) return
+
+    if (agentPickerRef && !agentPickerRef.contains(target)) {
+      setShowAgentPicker(false)
+    }
+    if (modelPickerRef && !modelPickerRef.contains(target)) {
+      setShowModelPicker(false)
+    }
+    if (slashPopoverRef && !slashPopoverRef.contains(target)) {
+      setShowSlashPopover(false)
+    }
+  }
+
+  // Handle slash command selection
+  function selectSlashCommand(cmd: Command) {
+    console.log("[Session] Selecting command:", cmd.id)
+    setInput("")
+    setShowSlashPopover(false)
+    setSlashQuery("")
+
+    // Use setTimeout to ensure state updates before command runs
+    setTimeout(() => {
+      console.log("[Session] Executing command:", cmd.id)
+      cmd.onSelect()
+    }, 0)
+  }
+
+  // Handle input changes to detect slash commands
+  function handleInputChange(value: string) {
+    setInput(value)
+
+    // Detect slash command pattern: starts with / and is the only content
+    const slashMatch = value.match(/^\/(\S*)$/)
+    if (slashMatch) {
+      console.log("[Session] Slash match:", slashMatch[1])
+      setSlashQuery(slashMatch[1])
+      setShowSlashPopover(true)
+      setSlashIndex(0)
+    } else {
+      setShowSlashPopover(false)
+      setSlashQuery("")
+    }
+  }
+
+  // Handle keyboard navigation in slash popover
+  function handleInputKeyDown(e: KeyboardEvent) {
+    if (!showSlashPopover()) return
+
+    const cmds = filteredSlashCommands()
+    if (cmds.length === 0) return
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setSlashIndex((i) => (i + 1) % cmds.length)
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setSlashIndex((i) => (i - 1 + cmds.length) % cmds.length)
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault()
+      const cmd = cmds[slashIndex()]
+      if (cmd) {
+        selectSlashCommand(cmd)
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault()
+      setShowSlashPopover(false)
+      setSlashQuery("")
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener("click", handleClickOutside)
+  })
+
+  onCleanup(() => {
+    document.removeEventListener("click", handleClickOutside)
+  })
 
   // Fetch existing session
   const [session, { refetch: refetchSession }] = createResource(
@@ -240,40 +403,82 @@ export function Session() {
   return (
     <div class="flex flex-col h-full">
       {/* Header */}
-      <header class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
+      <header
+        class="flex items-center justify-between px-6 py-3"
+        style={{
+          background: "var(--background-base)",
+          "border-bottom": "1px solid var(--border-base)",
+        }}
+      >
         <div>
-          <h1 class="text-lg font-semibold text-gray-900">{session()?.title || "New Session"}</h1>
+          <h1 class="text-base font-medium" style={{ color: "var(--text-strong)" }}>
+            {session()?.title || "New Session"}
+          </h1>
           <Show when={session()}>
-            <p class="text-sm text-gray-500">{session()?.id}</p>
+            <p class="text-xs" style={{ color: "var(--text-weak)" }}>
+              {session()?.id}
+            </p>
           </Show>
         </div>
 
         {/* Model & Agent Selectors */}
         <div class="flex items-center gap-4">
           {/* Agent Selector */}
-          <div class="relative">
+          <div class="relative" ref={agentPickerRef}>
             <button
-              onClick={() => setShowAgentPicker(!showAgentPicker())}
-              class="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowAgentPicker(!showAgentPicker())
+                setShowModelPicker(false)
+              }}
+              class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
+              style={{
+                border: "1px solid var(--border-base)",
+                color: "var(--text-base)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               <span class="capitalize">{providers.selectedAgent}</span>
-              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                class="w-4 h-4"
+                style={{ color: "var(--icon-weak)" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             <Show when={showAgentPicker()}>
-              <div class="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+              <div
+                class="absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-10 overflow-hidden"
+                style={{
+                  background: "var(--background-base)",
+                  border: "1px solid var(--border-base)",
+                }}
+              >
                 <For each={providers.agents}>
                   {(agent) => (
                     <button
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         providers.setSelectedAgent(agent.name)
                         setShowAgentPicker(false)
                       }}
-                      class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
-                      classList={{
-                        "bg-purple-50 text-purple-700": providers.selectedAgent === agent.name,
+                      class="w-full px-3 py-2 text-left text-sm transition-colors"
+                      style={{
+                        color:
+                          providers.selectedAgent === agent.name ? "var(--text-interactive-base)" : "var(--text-base)",
+                        background: providers.selectedAgent === agent.name ? "var(--surface-inset)" : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (providers.selectedAgent !== agent.name)
+                          e.currentTarget.style.background = "var(--surface-inset)"
+                      }}
+                      onMouseLeave={(e) => {
+                        if (providers.selectedAgent !== agent.name) e.currentTarget.style.background = "transparent"
                       }}
                     >
                       <span class="capitalize">{agent.name}</span>
@@ -281,34 +486,58 @@ export function Session() {
                   )}
                 </For>
                 <Show when={providers.agents.length === 0}>
-                  <div class="px-3 py-2 text-sm text-gray-500">No agents available</div>
+                  <div class="px-3 py-2 text-sm" style={{ color: "var(--text-weak)" }}>
+                    No agents available
+                  </div>
                 </Show>
               </div>
             </Show>
           </div>
 
           {/* Model Selector */}
-          <div class="relative">
+          <div class="relative" ref={modelPickerRef}>
             <button
-              onClick={() => setShowModelPicker(!showModelPicker())}
-              class="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowModelPicker(!showModelPicker())
+                setShowAgentPicker(false)
+              }}
+              class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
+              style={{
+                border: "1px solid var(--border-base)",
+                color: "var(--text-base)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               <span>
                 {providers.selectedModel
                   ? `${providers.selectedModel.providerID}/${providers.selectedModel.modelID}`
                   : "Select model"}
               </span>
-              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg
+                class="w-4 h-4"
+                style={{ color: "var(--icon-weak)" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
 
             <Show when={showModelPicker()}>
-              <div class="absolute right-0 top-full mt-1 w-72 max-h-96 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+              <div
+                class="absolute right-0 top-full mt-1 w-72 max-h-96 overflow-y-auto rounded-lg shadow-lg z-10"
+                style={{
+                  background: "var(--background-base)",
+                  border: "1px solid var(--border-base)",
+                }}
+              >
                 <Show when={providers.connected.length === 0}>
-                  <div class="px-3 py-4 text-sm text-gray-500 text-center">
+                  <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
                     <p>No providers connected.</p>
-                    <a href="/settings" class="text-purple-600 hover:underline">
+                    <a href="/settings" style={{ color: "var(--text-interactive-base)" }} class="hover:underline">
                       Connect a provider
                     </a>
                   </div>
@@ -317,26 +546,44 @@ export function Session() {
                 <For each={providers.providers.filter((p) => providers.connected.includes(p.id))}>
                   {(provider) => (
                     <div>
-                      <div class="px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b border-gray-100">
+                      <div
+                        class="px-3 py-2 text-xs font-medium"
+                        style={{
+                          color: "var(--text-weak)",
+                          background: "var(--surface-inset)",
+                          "border-bottom": "1px solid var(--border-base)",
+                        }}
+                      >
                         {provider.name}
                       </div>
                       <For each={Object.values(provider.models).slice(0, 10)}>
-                        {(model) => (
-                          <button
-                            onClick={() => {
-                              providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
-                              setShowModelPicker(false)
-                            }}
-                            class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                            classList={{
-                              "bg-purple-50 text-purple-700":
-                                providers.selectedModel?.providerID === provider.id &&
-                                providers.selectedModel?.modelID === model.id,
-                            }}
-                          >
-                            {model.name}
-                          </button>
-                        )}
+                        {(model) => {
+                          const selected =
+                            providers.selectedModel?.providerID === provider.id &&
+                            providers.selectedModel?.modelID === model.id
+                          return (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
+                                setShowModelPicker(false)
+                              }}
+                              class="w-full px-3 py-2 text-left text-sm transition-colors"
+                              style={{
+                                color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
+                                background: selected ? "var(--surface-inset)" : "transparent",
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!selected) e.currentTarget.style.background = "var(--surface-inset)"
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!selected) e.currentTarget.style.background = "transparent"
+                              }}
+                            >
+                              {model.name}
+                            </button>
+                          )
+                        }}
                       </For>
                     </div>
                   )}
@@ -346,7 +593,7 @@ export function Session() {
           </div>
 
           <Show when={processing()}>
-            <div class="flex items-center gap-2 text-sm text-purple-600">
+            <div class="flex items-center gap-2 text-sm" style={{ color: "var(--text-interactive-base)" }}>
               <Spinner class="w-4 h-4" />
               Processing...
             </div>
@@ -355,11 +602,20 @@ export function Session() {
       </header>
 
       {/* Messages */}
-      <div class="flex-1 overflow-y-auto p-6 space-y-4">
+      <div class="flex-1 overflow-y-auto p-6 space-y-4" style={{ background: "var(--background-stronger)" }}>
         <Show when={messages().length === 0 && !loading()}>
           <div class="flex flex-col items-center justify-center h-full text-center">
-            <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4">
-              <svg class="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div
+              class="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+              style={{ background: "var(--surface-inset)" }}
+            >
+              <svg
+                class="w-8 h-8"
+                style={{ color: "var(--text-interactive-base)" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path
                   stroke-linecap="round"
                   stroke-linejoin="round"
@@ -368,8 +624,10 @@ export function Session() {
                 />
               </svg>
             </div>
-            <h3 class="text-lg font-medium text-gray-900 mb-2">Start a conversation</h3>
-            <p class="text-gray-500">Type a message below to begin</p>
+            <h3 class="text-lg font-medium mb-2" style={{ color: "var(--text-strong)" }}>
+              Start a conversation
+            </h3>
+            <p style={{ color: "var(--text-weak)" }}>Type a message below to begin</p>
           </div>
         </Show>
 
@@ -383,16 +641,20 @@ export function Session() {
             >
               <div
                 class="rounded-lg p-4"
-                classList={{
-                  "bg-purple-50 border border-purple-100": message.role === "user",
-                  "bg-white border border-gray-200 shadow-sm": message.role === "assistant",
+                style={{
+                  background: message.role === "user" ? "var(--surface-inset)" : "var(--background-base)",
+                  border: `1px solid var(--border-base)`,
                 }}
               >
-                <div class="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">{message.role}</div>
+                <div class="text-xs font-medium mb-2 uppercase tracking-wide" style={{ color: "var(--text-weak)" }}>
+                  {message.role}
+                </div>
                 <Show
                   when={message.role === "assistant"}
                   fallback={
-                    <div class="text-gray-800 whitespace-pre-wrap">{extractTextContent(message.parts) || "..."}</div>
+                    <div class="whitespace-pre-wrap" style={{ color: "var(--text-base)" }}>
+                      {extractTextContent(message.parts) || "..."}
+                    </div>
                   }
                 >
                   <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
@@ -404,8 +666,14 @@ export function Session() {
 
         <Show when={processing()}>
           <div class="max-w-3xl">
-            <div class="rounded-lg p-4 bg-white border border-gray-200 shadow-sm">
-              <div class="flex items-center gap-2 text-gray-500">
+            <div
+              class="rounded-lg p-4"
+              style={{
+                background: "var(--background-base)",
+                border: "1px solid var(--border-base)",
+              }}
+            >
+              <div class="flex items-center gap-2" style={{ color: "var(--text-weak)" }}>
                 <Spinner class="w-4 h-4" />
                 <span>Thinking...</span>
               </div>
@@ -417,23 +685,132 @@ export function Session() {
       </div>
 
       {/* Input */}
-      <div class="p-4 border-t border-gray-200 bg-white">
-        <form onSubmit={sendMessage} class="flex gap-3 max-w-3xl mx-auto">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input()}
-            onInput={(e) => setInput(e.currentTarget.value)}
-            placeholder="Type a message..."
-            class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none"
-            disabled={loading() || processing()}
-          />
-          <Button type="submit" disabled={loading() || processing() || !input().trim()}>
-            <Show when={loading()} fallback="Send">
-              <Spinner class="w-4 h-4" />
+      <div class="p-4" style={{ background: "var(--background-base)", "border-top": "1px solid var(--border-base)" }}>
+        <div class="relative max-w-3xl mx-auto">
+          {/* Slash Command Popover */}
+          <Show when={showSlashPopover() && filteredSlashCommands().length > 0}>
+            <div
+              ref={slashPopoverRef}
+              class="absolute bottom-full left-0 mb-2 w-72 rounded-lg shadow-lg z-20 overflow-hidden"
+              style={{
+                background: "var(--background-base)",
+                border: "1px solid var(--border-base)",
+              }}
+            >
+              <div
+                class="px-3 py-2 text-xs font-medium"
+                style={{
+                  color: "var(--text-weak)",
+                  background: "var(--surface-inset)",
+                  "border-bottom": "1px solid var(--border-base)",
+                }}
+              >
+                Commands
+              </div>
+              <For each={filteredSlashCommands()}>
+                {(cmd, idx) => (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      selectSlashCommand(cmd)
+                    }}
+                    class="w-full px-3 py-2 text-left text-sm flex items-start gap-3 transition-colors"
+                    style={{
+                      background: idx() === slashIndex() ? "var(--surface-inset)" : "transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (idx() !== slashIndex()) e.currentTarget.style.background = "var(--surface-inset)"
+                    }}
+                    onMouseLeave={(e) => {
+                      if (idx() !== slashIndex()) e.currentTarget.style.background = "transparent"
+                    }}
+                  >
+                    <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
+                      /{cmd.slash}
+                    </span>
+                    <div class="flex-1">
+                      <div class="font-medium" style={{ color: "var(--text-strong)" }}>
+                        {cmd.title}
+                      </div>
+                      <Show when={cmd.description}>
+                        <div class="text-xs" style={{ color: "var(--text-weak)" }}>
+                          {cmd.description}
+                        </div>
+                      </Show>
+                    </div>
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+
+          <form onSubmit={sendMessage} class="flex gap-3">
+            <div class="flex-1 relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input()}
+                onInput={(e) => handleInputChange(e.currentTarget.value)}
+                onKeyDown={handleInputKeyDown}
+                placeholder="Type a message or / for commands..."
+                class="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none"
+                style={
+                  {
+                    background: "var(--background-base)",
+                    border: "1px solid var(--border-base)",
+                    color: "var(--text-base)",
+                    "--tw-ring-color": "var(--interactive-base)",
+                  } as any
+                }
+                disabled={loading() || processing()}
+              />
+              {/* Hint for slash commands */}
+              <Show when={!input() && !loading() && !processing()}>
+                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--text-weak)" }}>
+                  Type{" "}
+                  <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
+                    /
+                  </span>{" "}
+                  for commands
+                </div>
+              </Show>
+            </div>
+            <Button type="submit" disabled={loading() || processing() || !input().trim() || showSlashPopover()}>
+              <Show when={loading()} fallback="Send">
+                <Spinner class="w-4 h-4" />
+              </Show>
+            </Button>
+          </form>
+
+          {/* Current model/agent indicator */}
+          <div class="flex items-center gap-4 mt-2 text-xs" style={{ color: "var(--text-weak)" }}>
+            <Show when={providers.selectedAgent}>
+              <span>
+                Agent:{" "}
+                <span class="font-medium capitalize" style={{ color: "var(--text-base)" }}>
+                  {providers.selectedAgent}
+                </span>
+              </span>
             </Show>
-          </Button>
-        </form>
+            <Show when={providers.selectedModel}>
+              {(model) => (
+                <span>
+                  Model:{" "}
+                  <span class="font-medium" style={{ color: "var(--text-base)" }}>
+                    {model().providerID}/{model().modelID}
+                  </span>
+                </span>
+              )}
+            </Show>
+            <Show when={!providers.selectedModel && providers.connected.length === 0}>
+              <a href="/settings" style={{ color: "var(--text-interactive-base)" }} class="hover:underline">
+                Connect a provider to start
+              </a>
+            </Show>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -88,7 +88,16 @@ export function ProviderProvider(props: ParentProps) {
   const [agentsData, { refetch: refetchAgents }] = createResource(async () => {
     try {
       const res = await client.app.agents()
-      return (res.data as Agent[]) ?? []
+      console.log("[Providers] Agents response:", res)
+      console.log("[Providers] Agents data:", res.data)
+
+      // The API returns an array directly, SDK wraps it in { data: [...] }
+      const agents = res.data
+      if (!Array.isArray(agents)) {
+        console.error("[Providers] Agents is not an array:", agents)
+        return []
+      }
+      return agents as Agent[]
     } catch (e) {
       console.error("Failed to fetch agents:", e)
       return []

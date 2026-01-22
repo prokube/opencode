@@ -21,14 +21,13 @@ const server = Bun.serve({
   idleTimeout: 0, // Disable timeout for SSE connections
   async fetch(req) {
     const url = new URL(req.url)
-    let path = url.pathname
+    const path = url.pathname
 
-    // Proxy API requests to the OpenCode server
-    // These paths match the OpenCode API endpoints
+    // API requests go directly to the API without base path
+    // The SDK calls these paths directly on the origin
     const apiPaths = [
-      "/api/",
+      "/api",
       "/event",
-      "/session",
       "/config",
       "/provider",
       "/project",
@@ -39,8 +38,23 @@ const server = Bun.serve({
       "/health",
       "/path",
       "/command",
+      "/auth",
+      "/app",
+      "/agent",
     ]
-    const isApiRequest = apiPaths.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))
+
+    // Check if this is an API request (not a frontend route)
+    // API paths don't have the base path prefix
+    const isApiPath = apiPaths.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))
+
+    // Special handling for /session - only API if it doesn't have base path prefix
+    // Frontend routes: /opencode/session, /opencode/session/, /opencode/session/abc123
+    // API routes: /session (POST), /session/list, /session/create, etc.
+    const isSessionApi =
+      (path === "/session" || path.startsWith("/session/") || path.startsWith("/session?")) &&
+      !path.startsWith(basePathWithoutTrailing) // Not prefixed with base path = API call
+
+    const isApiRequest = isApiPath || isSessionApi
 
     if (isApiRequest) {
       const target = new URL(path + url.search, API_URL)
@@ -76,6 +90,7 @@ const server = Bun.serve({
         }
       }
 
+      console.log("[Proxy] API:", req.method, path)
       return fetch(target.toString(), {
         method: req.method,
         headers,
@@ -83,21 +98,20 @@ const server = Bun.serve({
       })
     }
 
-    // Strip base path prefix for file lookup
+    // Frontend routes - strip base path prefix for file lookup
+    let strippedPath = path
     if (basePathWithoutTrailing && path.startsWith(basePathWithoutTrailing)) {
-      path = path.slice(basePathWithoutTrailing.length) || "/"
+      strippedPath = path.slice(basePathWithoutTrailing.length) || "/"
     }
-
-    // Ensure path starts with /
-    if (!path.startsWith("/")) {
-      path = "/" + path
+    if (!strippedPath.startsWith("/")) {
+      strippedPath = "/" + strippedPath
     }
 
     // Try to serve static file
-    const filePath = `./dist${path}`
+    const filePath = `./dist${strippedPath}`
     const file = Bun.file(filePath)
     if (await file.exists()) {
-      const ext = path.split(".").pop() || ""
+      const ext = strippedPath.split(".").pop() || ""
       const mimeTypes: Record<string, string> = {
         js: "application/javascript",
         css: "text/css",
