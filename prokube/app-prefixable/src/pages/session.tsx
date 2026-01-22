@@ -259,22 +259,47 @@ export function Session() {
     console.log("[Session] Waiting for completion...")
     setProcessing(true)
 
+    // Give the server a moment to start processing
+    await new Promise((r) => setTimeout(r, 1000))
+
     for (let i = 0; i < 120; i++) {
       await new Promise((r) => setTimeout(r, 500))
 
       try {
         const res = await client.session.status({})
+        console.log("[Session] Status response:", res.data)
         const statuses = res.data as Record<string, { type: string }> | undefined
-        if (!statuses) continue
+        if (!statuses || typeof statuses !== "object") {
+          console.log("[Session] No statuses yet, continuing...")
+          continue
+        }
 
         const status = statuses[id]
-        console.log("[Session] Status:", status?.type)
+        console.log("[Session] Status for", id, ":", status?.type)
 
-        if (!status || status.type === "idle") {
+        // Only consider complete if we have a status and it's idle
+        // If status is undefined, the session might still be starting
+        if (status && status.type === "idle") {
           console.log("[Session] Complete, reloading messages...")
           await loadMessages(id)
           setProcessing(false)
           return
+        }
+
+        // If processing/running, continue polling
+        if (status && (status.type === "running" || status.type === "processing")) {
+          continue
+        }
+
+        // If no status after a few tries, assume it's done
+        if (i > 5 && !status) {
+          console.log("[Session] No status after retries, checking messages...")
+          await loadMessages(id)
+          if (messages().length > 1) {
+            // Got a response
+            setProcessing(false)
+            return
+          }
         }
       } catch (e) {
         console.error("[Session] Status check failed:", e)

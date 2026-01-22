@@ -113,11 +113,20 @@ export function Layout(props: ParentProps) {
       // Load sessions for all projects
       const res = await client.session.list({ roots: true })
       console.log("[Layout] Sessions response:", res)
-      if (res.data) {
-        setSessions(res.data)
+      const data = res.data
+      // Validate response is an array of sessions
+      if (Array.isArray(data)) {
+        // Filter to only valid sessions with id
+        const valid = data.filter((s): s is Session => s && typeof s === "object" && typeof s.id === "string")
+        console.log("[Layout] Valid sessions:", valid.length)
+        setSessions(valid)
+      } else {
+        console.warn("[Layout] Unexpected session.list response, not an array:", typeof data)
+        setSessions([])
       }
     } catch (e) {
       console.error("Failed to load sessions:", e)
+      setSessions([])
     } finally {
       setLoading(false)
     }

@@ -35,13 +35,14 @@ export function EventProvider(props: ParentProps) {
 
     eventSource.onmessage = (e) => {
       try {
-        const wrapper = JSON.parse(e.data) as { directory?: string; payload: Event }
-        const event = wrapper?.payload
+        const data = JSON.parse(e.data)
+        // Handle both formats: direct event or wrapped in payload
+        const event = (data?.payload ?? data) as Event
         if (!event || !event.type) {
-          console.warn("[Events] Received event without type:", wrapper)
+          console.warn("[Events] Received event without type:", data)
           return
         }
-        console.log("[Events] Received:", event.type)
+        console.log("[Events] Received:", event.type, event.properties)
 
         // Update session status
         if (event.type === "session.status") {
