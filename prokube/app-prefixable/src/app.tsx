@@ -2,8 +2,10 @@ import { Router, Route } from "@solidjs/router"
 import { BasePathProvider, useBasePath } from "./context/base-path"
 import { SDKProvider } from "./context/sdk"
 import { EventProvider } from "./context/events"
+import { ProviderProvider } from "./context/providers"
 import { Home } from "./pages/home"
 import { Session } from "./pages/session"
+import { Settings } from "./pages/settings"
 import { Layout } from "./pages/layout"
 
 function AppRoutes() {
@@ -14,6 +16,7 @@ function AppRoutes() {
     <Router base={base} root={Layout}>
       <Route path="/" component={Home} />
       <Route path="/session/:id?" component={Session} />
+      <Route path="/settings" component={Settings} />
     </Router>
   )
 }
@@ -23,7 +26,9 @@ export function App() {
     <BasePathProvider>
       <SDKProvider>
         <EventProvider>
-          <AppRoutes />
+          <ProviderProvider>
+            <AppRoutes />
+          </ProviderProvider>
         </EventProvider>
       </SDKProvider>
     </BasePathProvider>

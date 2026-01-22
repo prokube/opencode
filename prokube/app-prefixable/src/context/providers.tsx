@@ -1,0 +1,164 @@
+import { createContext, useContext, createResource, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
+import { useSDK } from "./sdk"
+
+// Define types locally to avoid SDK type mismatches
+interface Model {
+  id: string
+  name: string
+  providerID: string
+}
+
+interface Provider {
+  id: string
+  name: string
+  models: Record<string, Model>
+}
+
+interface Agent {
+  name: string
+  mode: string
+  hidden?: boolean
+}
+
+interface ProviderAuthMethod {
+  type: "api" | "oauth"
+  label: string
+}
+
+interface ModelKey {
+  providerID: string
+  modelID: string
+}
+
+interface ProviderListData {
+  all: Provider[]
+  connected: string[]
+  default: Record<string, string>
+}
+
+interface ProviderContextValue {
+  providers: Provider[]
+  connected: string[]
+  defaults: Record<string, string>
+  authMethods: Record<string, ProviderAuthMethod[]>
+  agents: Agent[]
+  loading: boolean
+  selectedModel: ModelKey | null
+  selectedAgent: string
+  setSelectedModel: (model: ModelKey | null) => void
+  setSelectedAgent: (agent: string) => void
+  refetch: () => void
+  connectProvider: (providerID: string, apiKey: string) => Promise<boolean>
+}
+
+const ProviderContext = createContext<ProviderContextValue>()
+
+export function ProviderProvider(props: ParentProps) {
+  const { client } = useSDK()
+
+  const [store, setStore] = createStore({
+    selectedModel: null as ModelKey | null,
+    selectedAgent: "code",
+  })
+
+  // Fetch providers
+  const [providerData, { refetch: refetchProviders }] = createResource(async () => {
+    try {
+      const res = await client.provider.list()
+      return res.data as ProviderListData | undefined
+    } catch (e) {
+      console.error("Failed to fetch providers:", e)
+      return undefined
+    }
+  })
+
+  // Fetch auth methods for all providers (returns { [providerID]: ProviderAuthMethod[] })
+  const [authData] = createResource(async () => {
+    try {
+      const res = await client.provider.auth()
+      return (res.data as Record<string, ProviderAuthMethod[]>) ?? {}
+    } catch (e) {
+      console.error("Failed to fetch auth methods:", e)
+      return {}
+    }
+  })
+
+  // Fetch agents
+  const [agentsData, { refetch: refetchAgents }] = createResource(async () => {
+    try {
+      const res = await client.app.agents()
+      return (res.data as Agent[]) ?? []
+    } catch (e) {
+      console.error("Failed to fetch agents:", e)
+      return []
+    }
+  })
+
+  function setSelectedModel(model: ModelKey | null) {
+    setStore("selectedModel", model)
+  }
+
+  function setSelectedAgent(agent: string) {
+    setStore("selectedAgent", agent)
+  }
+
+  async function connectProvider(providerID: string, apiKey: string): Promise<boolean> {
+    try {
+      await client.auth.set({
+        providerID,
+        auth: { type: "api", key: apiKey },
+      })
+      // Refresh provider list
+      refetchProviders()
+      return true
+    } catch (e) {
+      console.error("Failed to connect provider:", e)
+      return false
+    }
+  }
+
+  function refetch() {
+    refetchProviders()
+    refetchAgents()
+  }
+
+  const value: ProviderContextValue = {
+    get providers() {
+      return providerData()?.all ?? []
+    },
+    get connected() {
+      return providerData()?.connected ?? []
+    },
+    get defaults() {
+      return providerData()?.default ?? {}
+    },
+    get authMethods() {
+      return authData() ?? {}
+    },
+    get agents() {
+      return (agentsData() ?? []).filter((a) => a.mode === "primary" && !a.hidden)
+    },
+    get loading() {
+      return providerData.loading || agentsData.loading
+    },
+    get selectedModel() {
+      return store.selectedModel
+    },
+    get selectedAgent() {
+      return store.selectedAgent
+    },
+    setSelectedModel,
+    setSelectedAgent,
+    refetch,
+    connectProvider,
+  }
+
+  return <ProviderContext.Provider value={value}>{props.children}</ProviderContext.Provider>
+}
+
+export function useProviders() {
+  const ctx = useContext(ProviderContext)
+  if (!ctx) throw new Error("useProviders must be used within ProviderProvider")
+  return ctx
+}

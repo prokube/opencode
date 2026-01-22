@@ -1,8 +1,9 @@
-import { type ParentProps, createSignal, For, Show, onMount, createEffect } from "solid-js"
+import { type ParentProps, createSignal, For, Show, onMount } from "solid-js"
 import { A, useLocation, useNavigate } from "@solidjs/router"
 import { useBasePath } from "../context/base-path"
 import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
+import { useProviders } from "../context/providers"
 import { Button } from "@opencode-ai/ui/button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import type { Session } from "@opencode-ai/sdk/v2/client"
@@ -11,6 +12,7 @@ export function Layout(props: ParentProps) {
   const { basePath } = useBasePath()
   const { client } = useSDK()
   const events = useEvents()
+  const providers = useProviders()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -61,8 +63,8 @@ export function Layout(props: ParentProps) {
     }
   }
 
-  function isActive(sessionId: string) {
-    return location.pathname.includes(sessionId)
+  function isActive(path: string) {
+    return location.pathname.includes(path)
   }
 
   function formatTime(timestamp: number) {
@@ -166,15 +168,90 @@ export function Layout(props: ParentProps) {
           </Show>
         </div>
 
-        {/* Status */}
-        <Show when={sidebarOpen()}>
-          <div class="p-3 border-t border-gray-200 text-xs text-gray-500">
-            <div class="flex items-center gap-2">
-              <span class="w-2 h-2 bg-green-500 rounded-full" />
-              Connected
+        {/* Bottom Nav */}
+        <div class="border-t border-gray-200">
+          {/* Provider Status */}
+          <Show when={sidebarOpen()}>
+            <div class="p-3 space-y-2">
+              {/* Settings Link */}
+              <A
+                href="/settings"
+                class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors"
+                classList={{
+                  "bg-purple-50 text-purple-700": location.pathname === "/settings",
+                  "text-gray-700 hover:bg-gray-100": location.pathname !== "/settings",
+                }}
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                Settings
+              </A>
+
+              {/* Provider status indicator */}
+              <div class="px-3 py-2 text-xs text-gray-500">
+                <div class="flex items-center gap-2">
+                  <Show
+                    when={providers.connected.length > 0}
+                    fallback={
+                      <>
+                        <span class="w-2 h-2 bg-yellow-500 rounded-full" />
+                        <span>No providers</span>
+                      </>
+                    }
+                  >
+                    <span class="w-2 h-2 bg-green-500 rounded-full" />
+                    <span>{providers.connected.length} provider(s)</span>
+                  </Show>
+                </div>
+                <Show when={providers.selectedAgent}>
+                  <div class="mt-1 text-gray-400">Agent: {providers.selectedAgent}</div>
+                </Show>
+              </div>
             </div>
-          </div>
-        </Show>
+          </Show>
+
+          {/* Collapsed state */}
+          <Show when={!sidebarOpen()}>
+            <div class="p-3">
+              <A
+                href="/settings"
+                class="flex items-center justify-center p-2 rounded-lg transition-colors"
+                classList={{
+                  "bg-purple-50 text-purple-700": location.pathname === "/settings",
+                  "text-gray-500 hover:bg-gray-100": location.pathname !== "/settings",
+                }}
+                title="Settings"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </A>
+            </div>
+          </Show>
+        </div>
       </aside>
 
       {/* Main Content */}

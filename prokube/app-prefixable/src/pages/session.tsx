@@ -4,6 +4,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
+import { useProviders } from "../context/providers"
 import { Markdown } from "../components/markdown"
 import type { Part } from "@opencode-ai/sdk/v2/client"
 
@@ -25,12 +26,15 @@ export function Session() {
   const navigate = useNavigate()
   const { client } = useSDK()
   const events = useEvents()
+  const providers = useProviders()
 
   const [input, setInput] = createSignal("")
   const [messages, setMessages] = createSignal<DisplayMessage[]>([])
   const [loading, setLoading] = createSignal(false)
   const [processing, setProcessing] = createSignal(false)
   const [sessionId, setSessionId] = createSignal(params.id)
+  const [showModelPicker, setShowModelPicker] = createSignal(false)
+  const [showAgentPicker, setShowAgentPicker] = createSignal(false)
   let messagesEndRef: HTMLDivElement | undefined
   let inputRef: HTMLInputElement | undefined
 
@@ -201,12 +205,27 @@ export function Session() {
         navigate(`/session/${id}`, { replace: true })
       }
 
-      // Send message
+      // Send message with agent and model
       console.log("[Session] Sending message to session:", id)
-      const promptRes = await client.session.promptAsync({
+      const promptPayload: {
+        sessionID: string
+        parts: { type: "text"; text: string }[]
+        agent?: string
+        model?: { providerID: string; modelID: string }
+      } = {
         sessionID: id,
         parts: [{ type: "text", text }],
-      })
+      }
+
+      if (providers.selectedAgent) {
+        promptPayload.agent = providers.selectedAgent
+      }
+
+      if (providers.selectedModel) {
+        promptPayload.model = providers.selectedModel
+      }
+
+      const promptRes = await client.session.promptAsync(promptPayload)
       console.log("[Session] Prompt response:", promptRes)
 
       // Start polling for completion (SSE might not work through proxy)
@@ -228,12 +247,111 @@ export function Session() {
             <p class="text-sm text-gray-500">{session()?.id}</p>
           </Show>
         </div>
-        <Show when={processing()}>
-          <div class="flex items-center gap-2 text-sm text-purple-600">
-            <Spinner class="w-4 h-4" />
-            Processing...
+
+        {/* Model & Agent Selectors */}
+        <div class="flex items-center gap-4">
+          {/* Agent Selector */}
+          <div class="relative">
+            <button
+              onClick={() => setShowAgentPicker(!showAgentPicker())}
+              class="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              <span class="capitalize">{providers.selectedAgent}</span>
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <Show when={showAgentPicker()}>
+              <div class="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                <For each={providers.agents}>
+                  {(agent) => (
+                    <button
+                      onClick={() => {
+                        providers.setSelectedAgent(agent.name)
+                        setShowAgentPicker(false)
+                      }}
+                      class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg"
+                      classList={{
+                        "bg-purple-50 text-purple-700": providers.selectedAgent === agent.name,
+                      }}
+                    >
+                      <span class="capitalize">{agent.name}</span>
+                    </button>
+                  )}
+                </For>
+                <Show when={providers.agents.length === 0}>
+                  <div class="px-3 py-2 text-sm text-gray-500">No agents available</div>
+                </Show>
+              </div>
+            </Show>
           </div>
-        </Show>
+
+          {/* Model Selector */}
+          <div class="relative">
+            <button
+              onClick={() => setShowModelPicker(!showModelPicker())}
+              class="flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              <span>
+                {providers.selectedModel
+                  ? `${providers.selectedModel.providerID}/${providers.selectedModel.modelID}`
+                  : "Select model"}
+              </span>
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            <Show when={showModelPicker()}>
+              <div class="absolute right-0 top-full mt-1 w-72 max-h-96 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                <Show when={providers.connected.length === 0}>
+                  <div class="px-3 py-4 text-sm text-gray-500 text-center">
+                    <p>No providers connected.</p>
+                    <a href="/settings" class="text-purple-600 hover:underline">
+                      Connect a provider
+                    </a>
+                  </div>
+                </Show>
+
+                <For each={providers.providers.filter((p) => providers.connected.includes(p.id))}>
+                  {(provider) => (
+                    <div>
+                      <div class="px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b border-gray-100">
+                        {provider.name}
+                      </div>
+                      <For each={Object.values(provider.models).slice(0, 10)}>
+                        {(model) => (
+                          <button
+                            onClick={() => {
+                              providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
+                              setShowModelPicker(false)
+                            }}
+                            class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                            classList={{
+                              "bg-purple-50 text-purple-700":
+                                providers.selectedModel?.providerID === provider.id &&
+                                providers.selectedModel?.modelID === model.id,
+                            }}
+                          >
+                            {model.name}
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+
+          <Show when={processing()}>
+            <div class="flex items-center gap-2 text-sm text-purple-600">
+              <Spinner class="w-4 h-4" />
+              Processing...
+            </div>
+          </Show>
+        </div>
       </header>
 
       {/* Messages */}

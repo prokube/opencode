@@ -18,6 +18,7 @@ const basePathWithTrailing = BASE_PATH.endsWith("/") ? BASE_PATH : BASE_PATH + "
 
 const server = Bun.serve({
   port: PORT,
+  idleTimeout: 0, // Disable timeout for SSE connections
   async fetch(req) {
     const url = new URL(req.url)
     let path = url.pathname
@@ -45,49 +46,34 @@ const server = Bun.serve({
       const target = new URL(path + url.search, API_URL)
       const headers = new Headers(req.headers)
 
-      // SSE requests need special handling - stream responses properly
+      // SSE requests - just pass through the response body directly
       if (path.startsWith("/event")) {
         console.log("[Proxy] SSE request to:", target.toString())
-        const response = await fetch(target.toString(), {
-          method: req.method,
-          headers,
-        })
+        try {
+          const response = await fetch(target.toString(), {
+            method: req.method,
+            headers,
+          })
 
-        if (!response.ok) {
-          console.error("[Proxy] SSE error:", response.status, response.statusText)
-          return new Response(response.body, { status: response.status })
+          if (!response.ok) {
+            console.error("[Proxy] SSE error:", response.status, response.statusText)
+            return new Response(response.body, { status: response.status })
+          }
+
+          // Pass through the body directly - Bun handles streaming
+          return new Response(response.body, {
+            status: response.status,
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+              "X-Accel-Buffering": "no",
+            },
+          })
+        } catch (e) {
+          console.error("[Proxy] SSE connection error:", e)
+          return new Response("SSE proxy error", { status: 502 })
         }
-
-        // Create a transform stream to pass through SSE data
-        const { readable, writable } = new TransformStream()
-        const writer = writable.getWriter()
-        const reader = response.body?.getReader()
-
-        if (reader) {
-          ;(async () => {
-            try {
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                await writer.write(value)
-              }
-            } catch (e) {
-              console.error("[Proxy] SSE stream error:", e)
-            } finally {
-              writer.close()
-            }
-          })()
-        }
-
-        return new Response(readable, {
-          status: response.status,
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-            "X-Accel-Buffering": "no",
-          },
-        })
       }
 
       return fetch(target.toString(), {
