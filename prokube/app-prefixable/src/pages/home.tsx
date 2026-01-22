@@ -1,16 +1,19 @@
 import { useNavigate } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { useSDK } from "../context/sdk"
+import { base64Encode } from "../utils/path"
 
 export function Home() {
-  const { client } = useSDK()
+  const { client, directory } = useSDK()
   const navigate = useNavigate()
 
   async function createNewSession() {
+    if (!directory) return
     try {
       const res = await client.session.create({})
       if (res.data) {
-        navigate(`/session/${res.data.id}`)
+        const slug = base64Encode(directory)
+        navigate(`/${slug}/session/${res.data.id}`)
       }
     } catch (e) {
       console.error("Failed to create session:", e)

@@ -65,3 +65,18 @@ export function getServerUrl(): string {
   }
   return "http://localhost:4096"
 }
+
+// URL-safe Base64 encoding for directory paths
+export function base64Encode(value: string): string {
+  const bytes = new TextEncoder().encode(value)
+  const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("")
+  // URL-safe: replace + with -, / with _, remove padding =
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+}
+
+export function base64Decode(value: string): string {
+  // Restore standard base64 chars
+  const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"))
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}

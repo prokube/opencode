@@ -7,6 +7,7 @@ type SDKClient = ReturnType<typeof createOpencodeClient>
 interface SDKContextValue {
   client: SDKClient
   url: string
+  directory?: string
 }
 
 const SDKContext = createContext<SDKContextValue>()
@@ -20,7 +21,11 @@ export function SDKProvider(props: ParentProps & { directory?: string }) {
     throwOnError: true,
   })
 
-  return <SDKContext.Provider value={{ client, url: serverUrl }}>{props.children}</SDKContext.Provider>
+  return (
+    <SDKContext.Provider value={{ client, url: serverUrl, directory: props.directory }}>
+      {props.children}
+    </SDKContext.Provider>
+  )
 }
 
 export function useSDK() {

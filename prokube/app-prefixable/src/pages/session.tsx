@@ -6,6 +6,7 @@ import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
 import { useProviders } from "../context/providers"
 import { Markdown } from "../components/markdown"
+import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
 
 interface Command {
@@ -30,11 +31,14 @@ function extractTextContent(parts: Part[]): string {
 }
 
 export function Session() {
-  const params = useParams<{ id?: string }>()
+  const params = useParams<{ dir: string; id?: string }>()
   const navigate = useNavigate()
-  const { client } = useSDK()
+  const { client, directory } = useSDK()
   const events = useEvents()
   const providers = useProviders()
+
+  // Helper to get the current directory slug
+  const dirSlug = createMemo(() => (directory ? base64Encode(directory) : params.dir))
 
   const [input, setInput] = createSignal("")
   const [messages, setMessages] = createSignal<DisplayMessage[]>([])
@@ -61,7 +65,7 @@ export function Session() {
       slash: "new",
       onSelect: () => {
         console.log("[Command] New session")
-        navigate("/session")
+        navigate(`/${dirSlug()}/session`)
       },
     },
     {
@@ -71,7 +75,7 @@ export function Session() {
       slash: "settings",
       onSelect: () => {
         console.log("[Command] Settings")
-        navigate("/settings")
+        navigate(`/${dirSlug()}/settings`)
       },
     },
     {
@@ -81,7 +85,7 @@ export function Session() {
       slash: "connect",
       onSelect: () => {
         console.log("[Command] Connect")
-        navigate("/settings")
+        navigate(`/${dirSlug()}/settings`)
       },
     },
     {
@@ -365,7 +369,7 @@ export function Session() {
 
         id = createRes.data.id
         setSessionId(id)
-        navigate(`/session/${id}`, { replace: true })
+        navigate(`/${dirSlug()}/session/${id}`, { replace: true })
       }
 
       // Send message with agent and model
@@ -537,7 +541,11 @@ export function Session() {
                 <Show when={providers.connected.length === 0}>
                   <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
                     <p>No providers connected.</p>
-                    <a href="/settings" style={{ color: "var(--text-interactive-base)" }} class="hover:underline">
+                    <a
+                      href={`/${dirSlug()}/settings`}
+                      style={{ color: "var(--text-interactive-base)" }}
+                      class="hover:underline"
+                    >
                       Connect a provider
                     </a>
                   </div>
@@ -805,7 +813,11 @@ export function Session() {
               )}
             </Show>
             <Show when={!providers.selectedModel && providers.connected.length === 0}>
-              <a href="/settings" style={{ color: "var(--text-interactive-base)" }} class="hover:underline">
+              <a
+                href={`/${dirSlug()}/settings`}
+                style={{ color: "var(--text-interactive-base)" }}
+                class="hover:underline"
+              >
                 Connect a provider to start
               </a>
             </Show>
