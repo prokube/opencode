@@ -1,4 +1,4 @@
-import { type ParentProps, createSignal, For, Show, onMount } from "solid-js"
+import { type ParentProps, createSignal, For, Show, onMount, onCleanup, createResource } from "solid-js"
 import { A, useLocation, useNavigate } from "@solidjs/router"
 import { useBasePath } from "../context/base-path"
 import { useSDK } from "../context/sdk"
@@ -6,6 +6,13 @@ import { useEvents } from "../context/events"
 import { useProviders } from "../context/providers"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import type { Session } from "@opencode-ai/sdk/v2/client"
+
+interface Project {
+  id: string
+  worktree: string
+  vcs?: string
+  icon?: { color?: string }
+}
 
 export function Layout(props: ParentProps) {
   const { basePath } = useBasePath()
@@ -18,6 +25,49 @@ export function Layout(props: ParentProps) {
   const [sessions, setSessions] = createSignal<Session[]>([])
   const [loading, setLoading] = createSignal(true)
   const [sidebarOpen, setSidebarOpen] = createSignal(true)
+  const [showProjectPicker, setShowProjectPicker] = createSignal(false)
+  let projectPickerRef: HTMLDivElement | undefined
+
+  // Close project picker on click outside
+  function handleClickOutside(e: MouseEvent) {
+    if (projectPickerRef && !projectPickerRef.contains(e.target as Node)) {
+      setShowProjectPicker(false)
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener("click", handleClickOutside)
+  })
+
+  onCleanup(() => {
+    document.removeEventListener("click", handleClickOutside)
+  })
+
+  // Fetch current project
+  const [currentProject] = createResource(async () => {
+    try {
+      const res = await client.project.current()
+      return res.data as Project | undefined
+    } catch (e) {
+      console.error("Failed to fetch current project:", e)
+      return undefined
+    }
+  })
+
+  // Fetch all projects
+  const [projects] = createResource(async () => {
+    try {
+      const res = await client.project.list()
+      return (res.data as Project[]) ?? []
+    } catch (e) {
+      console.error("Failed to fetch projects:", e)
+      return []
+    }
+  })
+
+  function getProjectName(worktree: string): string {
+    return worktree.split("/").pop() || worktree
+  }
 
   async function loadSessions() {
     try {
@@ -88,21 +138,133 @@ export function Layout(props: ParentProps) {
           "border-right": "1px solid var(--border-base)",
         }}
       >
-        {/* Logo */}
+        {/* Logo & Project */}
         <div class="flex items-center justify-between p-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
           <Show when={sidebarOpen()}>
-            <A
-              href={basePath}
-              class="flex items-center gap-2 text-sm font-medium"
-              style={{ color: "var(--text-strong)" }}
-            >
-              <div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center">
-                <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
+            <div class="flex-1 min-w-0">
+              {/* Project Picker */}
+              <div class="relative" ref={projectPickerRef}>
+                <button
+                  onClick={() => setShowProjectPicker(!showProjectPicker())}
+                  class="flex items-center gap-2 text-sm font-medium w-full text-left rounded-md p-1 -m-1 transition-colors"
+                  style={{ color: "var(--text-strong)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <div class="w-6 h-6 bg-purple-600 rounded flex items-center justify-center shrink-0">
+                    <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <span class="truncate">
+                    {currentProject() ? getProjectName(currentProject()!.worktree) : "Loading..."}
+                  </span>
+                  <svg
+                    class="w-3 h-3 shrink-0"
+                    style={{ color: "var(--icon-weak)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Project Dropdown */}
+                <Show when={showProjectPicker()}>
+                  <div
+                    class="absolute left-0 top-full mt-1 w-72 rounded-lg shadow-lg z-50 overflow-hidden"
+                    style={{
+                      background: "var(--background-base)",
+                      border: "1px solid var(--border-base)",
+                    }}
+                  >
+                    <div
+                      class="px-3 py-2 text-xs font-medium"
+                      style={{
+                        color: "var(--text-weak)",
+                        background: "var(--surface-inset)",
+                        "border-bottom": "1px solid var(--border-base)",
+                      }}
+                    >
+                      Projects
+                    </div>
+                    <div class="max-h-64 overflow-y-auto">
+                      <For each={projects()}>
+                        {(project) => {
+                          const isCurrent = currentProject()?.id === project.id
+                          return (
+                            <div
+                              class="px-3 py-2 text-sm flex items-center gap-2"
+                              style={{
+                                color: isCurrent ? "var(--text-interactive-base)" : "var(--text-base)",
+                                background: isCurrent ? "var(--surface-inset)" : "transparent",
+                              }}
+                            >
+                              <svg
+                                class="w-4 h-4 shrink-0"
+                                style={{ color: "var(--icon-weak)" }}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  stroke-width="2"
+                                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                                />
+                              </svg>
+                              <div class="flex-1 min-w-0">
+                                <div class="truncate font-medium">{getProjectName(project.worktree)}</div>
+                                <div class="truncate text-xs" style={{ color: "var(--text-weak)" }}>
+                                  {project.worktree}
+                                </div>
+                              </div>
+                              <Show when={isCurrent}>
+                                <svg
+                                  class="w-4 h-4 shrink-0"
+                                  style={{ color: "var(--text-interactive-base)" }}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </svg>
+                              </Show>
+                            </div>
+                          )
+                        }}
+                      </For>
+                    </div>
+                    <div
+                      class="px-3 py-2 text-xs"
+                      style={{
+                        color: "var(--text-weak)",
+                        background: "var(--surface-inset)",
+                        "border-top": "1px solid var(--border-base)",
+                      }}
+                    >
+                      To switch projects, run{" "}
+                      <code class="px-1 rounded" style={{ background: "var(--background-base)" }}>
+                        opencode
+                      </code>{" "}
+                      in the target folder
+                    </div>
+                  </div>
+                </Show>
               </div>
-              <span>OpenCode</span>
-            </A>
+            </div>
           </Show>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen())}
