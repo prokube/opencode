@@ -1,4 +1,4 @@
-import { createResource, For, Show, onMount, createEffect } from "solid-js"
+import { createResource, For, Show, createEffect, createMemo } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "../context/base-path"
@@ -8,7 +8,7 @@ import { Button } from "@opencode-ai/ui/button"
 
 interface Project {
   id: string
-  worktree: string
+  worktree?: string
   name?: string
   time?: { created: number; updated: number }
 }
@@ -41,28 +41,34 @@ export function ProjectPicker() {
     }
   })
 
+  // Filter to only valid projects (with worktree that's not "/")
+  const validProjects = createMemo(() => (projects() ?? []).filter((p) => p.worktree && p.worktree !== "/"))
+
   // Auto-navigate once resources are loaded
   createEffect(() => {
     // Wait for both resources to finish loading
     if (projects.loading || currentProject.loading) return
 
-    const projectList = projects() ?? []
+    const projectList = validProjects()
     const current = currentProject()
 
-    // If we have a current project, navigate to it
-    if (current?.worktree) {
+    // If we have a current project with valid worktree, navigate to it
+    if (current?.worktree && current.worktree !== "/") {
       navigate(`/${base64Encode(current.worktree)}/session`, { replace: true })
       return
     }
 
-    // If we have projects, navigate to the most recently updated one
+    // If we have valid projects, navigate to the most recently updated one
     if (projectList.length > 0) {
       const sorted = [...projectList].sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
-      navigate(`/${base64Encode(sorted[0].worktree)}/session`, { replace: true })
-      return
+      const first = sorted[0]
+      if (first?.worktree) {
+        navigate(`/${base64Encode(first.worktree)}/session`, { replace: true })
+        return
+      }
     }
 
-    // No projects found - in Kubeflow context, auto-navigate to default directory
+    // No valid projects found - in Kubeflow context, auto-navigate to default directory
     // This will create a new project for /home/jovyan
     navigate(`/${base64Encode(DEFAULT_DIRECTORY)}/session`, { replace: true })
   })
@@ -72,6 +78,7 @@ export function ProjectPicker() {
   }
 
   function getProjectName(project: Project): string {
+    if (!project.worktree) return project.name || project.id || "Unknown"
     return project.name || project.worktree.split("/").pop() || project.worktree
   }
 
@@ -97,7 +104,7 @@ export function ProjectPicker() {
           }
         >
           <Show
-            when={projects()?.length}
+            when={validProjects().length}
             fallback={
               <div class="text-center py-8">
                 <div class="mb-4" style={{ color: "var(--text-weak)" }}>
@@ -111,12 +118,12 @@ export function ProjectPicker() {
             }
           >
             <div class="space-y-2">
-              <For each={projects()}>
+              <For each={validProjects()}>
                 {(project) => {
                   const isCurrent = currentProject()?.id === project.id
                   return (
                     <button
-                      onClick={() => selectProject(project.worktree)}
+                      onClick={() => selectProject(project.worktree!)}
                       class="w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors"
                       style={{
                         background: isCurrent ? "var(--surface-inset)" : "transparent",
