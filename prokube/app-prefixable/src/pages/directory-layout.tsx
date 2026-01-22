@@ -3,6 +3,7 @@ import { useParams, Navigate } from "@solidjs/router"
 import { SDKProvider } from "../context/sdk"
 import { EventProvider } from "../context/events"
 import { ProviderProvider } from "../context/providers"
+import { MCPProvider } from "../context/mcp"
 import { base64Decode } from "../utils/path"
 import { Layout } from "./layout"
 
@@ -27,7 +28,9 @@ export function DirectoryLayout(props: ParentProps) {
         <SDKProvider directory={dir()}>
           <EventProvider>
             <ProviderProvider>
-              <Layout>{props.children}</Layout>
+              <MCPProvider>
+                <Layout>{props.children}</Layout>
+              </MCPProvider>
             </ProviderProvider>
           </EventProvider>
         </SDKProvider>

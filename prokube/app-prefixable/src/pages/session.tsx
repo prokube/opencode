@@ -5,7 +5,10 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
 import { useProviders } from "../context/providers"
+import { useMCP } from "../context/mcp"
 import { Markdown } from "../components/markdown"
+import { MCPDialog } from "../components/mcp-dialog"
+import { MCPAddDialog } from "../components/mcp-add-dialog"
 import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
 
@@ -36,6 +39,7 @@ export function Session() {
   const { client, directory } = useSDK()
   const events = useEvents()
   const providers = useProviders()
+  const mcp = useMCP()
 
   // Helper to get the current directory slug
   const dirSlug = createMemo(() => (directory ? base64Encode(directory) : params.dir))
@@ -50,6 +54,8 @@ export function Session() {
   const [showSlashPopover, setShowSlashPopover] = createSignal(false)
   const [slashQuery, setSlashQuery] = createSignal("")
   const [slashIndex, setSlashIndex] = createSignal(0)
+  const [showMCPDialog, setShowMCPDialog] = createSignal(false)
+  const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   let messagesEndRef: HTMLDivElement | undefined
   let inputRef: HTMLInputElement | undefined
   let agentPickerRef: HTMLDivElement | undefined
@@ -106,6 +112,16 @@ export function Session() {
       onSelect: () => {
         console.log("[Command] Agent picker")
         setShowAgentPicker(true)
+      },
+    },
+    {
+      id: "mcp.manage",
+      title: "MCP Servers",
+      description: "Manage MCP server connections",
+      slash: "mcp",
+      onSelect: () => {
+        console.log("[Command] MCP dialog")
+        setShowMCPDialog(true)
       },
     },
   ]
@@ -600,6 +616,32 @@ export function Session() {
             </Show>
           </div>
 
+          {/* MCP Indicator */}
+          <Show when={mcp.stats().total > 0}>
+            <button
+              onClick={() => setShowMCPDialog(true)}
+              class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
+              style={{
+                border: "1px solid var(--border-base)",
+                color: "var(--text-base)",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <div
+                class="w-2 h-2 rounded-full"
+                style={{
+                  background: mcp.stats().failed
+                    ? "var(--icon-critical-base)"
+                    : mcp.stats().enabled > 0
+                      ? "var(--icon-success-base)"
+                      : "var(--icon-weak)",
+                }}
+              />
+              <span>{mcp.stats().enabled} MCP</span>
+            </button>
+          </Show>
+
           <Show when={processing()}>
             <div class="flex items-center gap-2 text-sm" style={{ color: "var(--text-interactive-base)" }}>
               <Spinner class="w-4 h-4" />
@@ -824,6 +866,27 @@ export function Session() {
           </div>
         </div>
       </div>
+
+      {/* MCP Dialogs */}
+      <Show when={showMCPDialog()}>
+        <MCPDialog
+          onClose={() => setShowMCPDialog(false)}
+          onAddServer={() => {
+            setShowMCPDialog(false)
+            setShowMCPAddDialog(true)
+          }}
+        />
+      </Show>
+
+      <Show when={showMCPAddDialog()}>
+        <MCPAddDialog
+          onClose={() => setShowMCPAddDialog(false)}
+          onBack={() => {
+            setShowMCPAddDialog(false)
+            setShowMCPDialog(true)
+          }}
+        />
+      </Show>
     </div>
   )
 }
