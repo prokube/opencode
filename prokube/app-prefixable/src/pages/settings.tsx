@@ -1,15 +1,20 @@
 import { createSignal, For, Show } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useProviders } from "../context/providers"
+import { useMCP } from "../context/mcp"
+import { MCPAddDialog } from "../components/mcp-add-dialog"
 
 export function Settings() {
   const providers = useProviders()
+  const mcp = useMCP()
   const [selectedProvider, setSelectedProvider] = createSignal<string | null>(null)
   const [apiKey, setApiKey] = createSignal("")
   const [connecting, setConnecting] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [success, setSuccess] = createSignal<string | null>(null)
   const [activeTab, setActiveTab] = createSignal("providers")
+  const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
+  const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
 
   async function handleConnect(e: SubmitEvent) {
     e.preventDefault()
@@ -41,9 +46,10 @@ export function Settings() {
   }
 
   const tabs = [
-    { id: "providers", label: "Providers", icon: "server" },
-    { id: "models", label: "Models", icon: "brain" },
-    { id: "agents", label: "Agents", icon: "task" },
+    { id: "providers", label: "Providers" },
+    { id: "mcp", label: "MCP Servers" },
+    { id: "models", label: "Models" },
+    { id: "agents", label: "Agents" },
   ]
 
   return (
@@ -273,6 +279,201 @@ export function Settings() {
             </div>
           </Show>
 
+          {/* MCP Servers Tab */}
+          <Show when={activeTab() === "mcp"}>
+            <div class="space-y-6">
+              <header>
+                <h1 class="text-lg font-medium" style={{ color: "var(--text-strong)" }}>
+                  MCP Servers
+                </h1>
+                <p class="text-sm mt-1" style={{ color: "var(--text-weak)" }}>
+                  Model Context Protocol servers extend AI capabilities with tools and resources
+                </p>
+              </header>
+
+              {/* Server List */}
+              <section
+                class="rounded-lg overflow-hidden"
+                style={{
+                  background: "var(--background-base)",
+                  border: "1px solid var(--border-base)",
+                }}
+              >
+                <div
+                  class="px-4 py-3 flex items-center justify-between"
+                  style={{ "border-bottom": "1px solid var(--border-base)" }}
+                >
+                  <h2 class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
+                    Configured Servers ({mcp.stats().enabled}/{mcp.stats().total} connected)
+                  </h2>
+                  <button
+                    onClick={() => setShowMCPAddDialog(true)}
+                    class="text-xs px-2 py-1 rounded transition-colors"
+                    style={{
+                      background: "var(--interactive-base)",
+                      color: "white",
+                    }}
+                  >
+                    + Add Server
+                  </button>
+                </div>
+
+                <Show when={mcp.loading()}>
+                  <div class="p-6 flex items-center justify-center gap-2" style={{ color: "var(--text-weak)" }}>
+                    <Spinner class="w-4 h-4" />
+                    <span class="text-sm">Loading...</span>
+                  </div>
+                </Show>
+
+                <Show when={!mcp.loading() && Object.keys(mcp.servers).length === 0}>
+                  <div class="p-6 text-center">
+                    <p class="text-sm" style={{ color: "var(--text-weak)" }}>
+                      No MCP servers configured yet.
+                    </p>
+                    <button
+                      onClick={() => setShowMCPAddDialog(true)}
+                      class="mt-2 text-sm hover:underline"
+                      style={{ color: "var(--text-interactive-base)" }}
+                    >
+                      Add your first server
+                    </button>
+                  </div>
+                </Show>
+
+                <Show when={!mcp.loading() && Object.keys(mcp.servers).length > 0}>
+                  <div class="divide-y" style={{ "border-color": "var(--border-base)" }}>
+                    <For each={Object.entries(mcp.servers).sort((a, b) => a[0].localeCompare(b[0]))}>
+                      {([name, status]) => {
+                        const isConnected = () => status.status === "connected"
+                        const isFailed = () => status.status === "failed"
+                        const needsAuth = () => status.status === "needs_auth"
+                        const errorMsg = () => (status.status === "failed" ? (status as any).error : undefined)
+
+                        return (
+                          <div class="px-4 py-3 flex items-center justify-between gap-4">
+                            <div class="flex-1 min-w-0">
+                              <div class="flex items-center gap-2">
+                                <span class="font-medium text-sm" style={{ color: "var(--text-strong)" }}>
+                                  {name}
+                                </span>
+                                <span
+                                  class="text-xs px-1.5 py-0.5 rounded"
+                                  style={{
+                                    background: "var(--surface-inset)",
+                                    color: isConnected()
+                                      ? "var(--icon-success-base)"
+                                      : isFailed()
+                                        ? "var(--icon-critical-base)"
+                                        : needsAuth()
+                                          ? "var(--icon-warning-base)"
+                                          : "var(--text-weak)",
+                                  }}
+                                >
+                                  {status.status === "connected"
+                                    ? "Connected"
+                                    : status.status === "disabled"
+                                      ? "Disabled"
+                                      : status.status === "failed"
+                                        ? "Failed"
+                                        : status.status === "needs_auth"
+                                          ? "Needs Auth"
+                                          : status.status}
+                                </span>
+                                <Show when={mcpLoading() === name}>
+                                  <Spinner class="w-3 h-3" />
+                                </Show>
+                              </div>
+                              <Show when={errorMsg()}>
+                                <p class="text-xs mt-0.5 truncate" style={{ color: "var(--text-weak)" }}>
+                                  {errorMsg()}
+                                </p>
+                              </Show>
+                            </div>
+
+                            <div class="flex items-center gap-2">
+                              <Show when={needsAuth()}>
+                                <button
+                                  onClick={async () => {
+                                    setMcpLoading(name)
+                                    const result = await mcp.startAuth(name)
+                                    if (result?.authorizationUrl) {
+                                      window.open(result.authorizationUrl, "_blank")
+                                    }
+                                    setMcpLoading(null)
+                                  }}
+                                  class="text-xs px-2 py-1 rounded"
+                                  style={{
+                                    background: "var(--surface-inset)",
+                                    color: "var(--text-interactive-base)",
+                                  }}
+                                >
+                                  Authenticate
+                                </button>
+                              </Show>
+
+                              {/* Toggle Switch */}
+                              <button
+                                onClick={async () => {
+                                  setMcpLoading(name)
+                                  if (isConnected()) {
+                                    await mcp.disconnect(name)
+                                  } else {
+                                    await mcp.connect(name)
+                                  }
+                                  setMcpLoading(null)
+                                }}
+                                disabled={mcpLoading() === name}
+                                class="relative w-10 h-5 rounded-full transition-colors disabled:opacity-50"
+                                style={{
+                                  background: isConnected() ? "var(--interactive-base)" : "var(--surface-inset)",
+                                }}
+                              >
+                                <div
+                                  class="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+                                  style={{
+                                    background: "white",
+                                    left: isConnected() ? "calc(100% - 18px)" : "2px",
+                                  }}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </section>
+
+              {/* Info Section */}
+              <section
+                class="rounded-lg p-4"
+                style={{
+                  background: "var(--surface-inset)",
+                  border: "1px solid var(--border-base)",
+                }}
+              >
+                <h3 class="text-sm font-medium mb-2" style={{ color: "var(--text-strong)" }}>
+                  About MCP
+                </h3>
+                <p class="text-xs" style={{ color: "var(--text-weak)" }}>
+                  The Model Context Protocol (MCP) allows AI assistants to access external tools, APIs, and data
+                  sources. Servers can be local (running commands on your machine) or remote (connecting to hosted
+                  services).
+                </p>
+                <a
+                  href="https://modelcontextprotocol.io"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-xs mt-2 inline-block hover:underline"
+                  style={{ color: "var(--text-interactive-base)" }}
+                >
+                  Learn more about MCP →
+                </a>
+              </section>
+            </div>
+          </Show>
+
           {/* Models Tab */}
           <Show when={activeTab() === "models"}>
             <div class="space-y-6">
@@ -396,6 +597,11 @@ export function Settings() {
           </Show>
         </div>
       </div>
+
+      {/* MCP Add Dialog */}
+      <Show when={showMCPAddDialog()}>
+        <MCPAddDialog onClose={() => setShowMCPAddDialog(false)} onBack={() => setShowMCPAddDialog(false)} />
+      </Show>
     </div>
   )
 }

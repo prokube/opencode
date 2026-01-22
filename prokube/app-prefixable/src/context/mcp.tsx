@@ -11,22 +11,31 @@ type MCPStatus =
   | { status: "needs_auth" }
   | { status: "needs_client_registration"; error: string }
 
-// MCP Config types
-interface McpLocalConfig {
+// MCP Config types - exported for use in components
+export interface McpLocalConfig {
   type: "local"
   command: string[]
   environment?: Record<string, string>
   enabled?: boolean
+  timeout?: number
 }
 
-interface McpRemoteConfig {
+export interface McpOAuthConfig {
+  clientId?: string
+  clientSecret?: string
+  scope?: string
+}
+
+export interface McpRemoteConfig {
   type: "remote"
   url: string
   headers?: Record<string, string>
+  oauth?: McpOAuthConfig | false
   enabled?: boolean
+  timeout?: number
 }
 
-type McpConfig = McpLocalConfig | McpRemoteConfig
+export type McpConfig = McpLocalConfig | McpRemoteConfig
 
 interface MCPContextValue {
   servers: Record<string, MCPStatus>
