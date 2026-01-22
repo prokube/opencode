@@ -1,0 +1,33 @@
+{
+  "name": "@prokube/app-prefixable",
+  "version": "0.0.1",
+  "description": "Prefix-aware Web UI for OpenCode",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run dev.ts",
+    "build": "bun run build.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/sdk": "workspace:*",
+    "@opencode-ai/ui": "workspace:*",
+    "@opencode-ai/util": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "marked": "catalog:",
+    "solid-js": "catalog:"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "autoprefixer": "^10.4.20",
+    "esbuild": "0.25.5",
+    "esbuild-plugin-solid": "0.6.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@opencode-ai/ui": ">=1.1.0",
+    "@opencode-ai/sdk": ">=1.1.0"
+  }
+}
