@@ -428,15 +428,12 @@ export function Session() {
       const promptPayload: {
         sessionID: string
         parts: { type: "text"; text: string }[]
-        agent?: string
+        agent: string
         model?: { providerID: string; modelID: string }
       } = {
         sessionID: id,
         parts: [{ type: "text", text }],
-      }
-
-      if (providers.selectedAgent) {
-        promptPayload.agent = providers.selectedAgent
+        agent: providers.selectedAgent || "build",
       }
 
       if (providers.selectedModel) {
