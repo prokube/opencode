@@ -74,13 +74,6 @@ bun run dev
 
 The dev server runs on `http://localhost:3000` and proxies API requests to the backend.
 
-### Building for Production
-
-```bash
-cd prokube/app-prefixable
-bun run build
-```
-
 ## CI/CD
 
 Docker image builds and cluster deployments are handled by **GitLab CI**. Do not build Docker images locally - push your changes and let the CI pipeline handle it.
@@ -227,7 +220,6 @@ curl http://127.0.0.1:4096/session/<session-id>/message
 
 When ending a work session:
 
-1. **Build and verify**: `cd prokube/app-prefixable && bun run build`
-2. **Commit changes**: Stage specific files, commit with clear message
-3. **Push to remote**: `git push` - work is NOT complete until push succeeds
-4. **Provide context**: Summarize what was done and what's next
+1. **Commit changes**: Stage specific files, commit with clear message
+2. **Push to remote**: `git push` - work is NOT complete until push succeeds
+3. **Provide context**: Summarize what was done and what's next
