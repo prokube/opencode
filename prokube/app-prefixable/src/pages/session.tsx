@@ -24,6 +24,7 @@ interface DisplayMessage {
   id: string
   role: "user" | "assistant"
   parts: Part[]
+  error?: { name: string; data?: { message?: string } }
 }
 
 function extractTextContent(parts: Part[]): string {
@@ -56,6 +57,7 @@ export function Session() {
   const [slashIndex, setSlashIndex] = createSignal(0)
   const [showMCPDialog, setShowMCPDialog] = createSignal(false)
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
+  const [error, setError] = createSignal<string | null>(null)
   let messagesEndRef: HTMLDivElement | undefined
   let inputRef: HTMLInputElement | undefined
   let agentPickerRef: HTMLDivElement | undefined
@@ -245,6 +247,7 @@ export function Session() {
           id: msg.info.id,
           role: msg.info.role as "user" | "assistant",
           parts: msg.parts,
+          error: (msg.info as { error?: DisplayMessage["error"] }).error,
         }))
         console.log("[Session] Loaded messages:", msgs.length)
         setMessages(msgs)
@@ -388,6 +391,13 @@ export function Session() {
     const text = input().trim()
     if (!text || loading()) return
 
+    // Require explicit model selection to avoid OpenCode auto-selecting a broken provider
+    if (!providers.selectedModel) {
+      setError("Please select a model before sending messages. Click the model button in the header.")
+      return
+    }
+
+    setError(null)
     setLoading(true)
     setInput("")
 
@@ -867,6 +877,16 @@ export function Session() {
                 <div class="text-xs font-medium mb-2 uppercase tracking-wide" style={{ color: "var(--text-weak)" }}>
                   {message.role}
                 </div>
+                <Show when={message.error}>
+                  {(err) => (
+                    <div
+                      class="px-3 py-2 rounded text-sm mb-2"
+                      style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
+                    >
+                      <strong>Error:</strong> {err().data?.message || err().name || "Unknown error"}
+                    </div>
+                  )}
+                </Show>
                 <Show
                   when={message.role === "assistant"}
                   fallback={
@@ -875,7 +895,9 @@ export function Session() {
                     </div>
                   }
                 >
-                  <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
+                  <Show when={extractTextContent(message.parts) || !message.error} fallback={null}>
+                    <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
+                  </Show>
                 </Show>
               </div>
             </div>
@@ -964,6 +986,16 @@ export function Session() {
             </div>
           </Show>
 
+          {/* Error message */}
+          <Show when={error()}>
+            <div
+              class="px-4 py-2 rounded-lg text-sm mb-2"
+              style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
+            >
+              {error()}
+            </div>
+          </Show>
+
           <form onSubmit={sendMessage} class="flex gap-3">
             <div class="flex-1 relative">
               <input
@@ -1030,6 +1062,11 @@ export function Session() {
               >
                 Connect a provider to start
               </a>
+            </Show>
+            <Show when={!providers.selectedModel && providers.connected.length > 0}>
+              <span style={{ color: "var(--status-warning-text)" }}>
+                No model selected - click the model button in the header to choose one
+              </span>
             </Show>
           </div>
         </div>
