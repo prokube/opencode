@@ -194,10 +194,10 @@ export function Layout(props: ParentProps) {
       >
         {/* Logo & Collapse */}
         <div class="flex items-center justify-between p-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
-          {/* PK Icon */}
-          <div class="shrink-0">
+          {/* PK Icon - links to home */}
+          <a href="/" class="shrink-0 hover:opacity-80 transition-opacity" title="Home">
             <PkIcon class="w-7 h-7 rounded" />
-          </div>
+          </a>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen())}
             class="p-1.5 rounded transition-colors"
