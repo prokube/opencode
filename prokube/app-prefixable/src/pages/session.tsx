@@ -34,6 +34,13 @@ function extractTextContent(parts: Part[]): string {
     .join("")
 }
 
+// Check if a message has any visible content (text or error)
+function hasVisibleContent(message: DisplayMessage): boolean {
+  if (message.error) return true
+  if (message.role === "user") return true
+  return extractTextContent(message.parts).trim().length > 0
+}
+
 export function Session() {
   const params = useParams<{ dir: string; id?: string }>()
   const navigate = useNavigate()
@@ -869,7 +876,7 @@ export function Session() {
             </div>
           </Show>
 
-          <For each={messages()}>
+          <For each={messages().filter(hasVisibleContent)}>
             {(message) => (
               <div
                 class="max-w-3xl"
