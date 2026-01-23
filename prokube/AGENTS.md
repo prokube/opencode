@@ -48,36 +48,42 @@ Kubeflow Pod (Port 8888)
 2. **API Proxy**: All API requests go through the Bun server which strips the prefix before forwarding
 3. **SSE Events**: Server-Sent Events are proxied for real-time updates
 
-## Development Workflow
+## Local Development
 
-### Building the UI
+For local development, run the backend and frontend separately in a fresh working directory:
+
+### 1. Start OpenCode API Server
+
+```bash
+# Create a fresh test directory and start the API server
+mkdir -p /tmp/opencode-test && cd /tmp/opencode-test
+opencode server
+# Or from source:
+cd packages/opencode && bun dev
+```
+
+The API server runs on `http://localhost:4096`.
+
+### 2. Start Frontend Dev Server
 
 ```bash
 cd prokube/app-prefixable
 bun install
+bun run dev
+```
+
+The dev server runs on `http://localhost:3000` and proxies API requests to the backend.
+
+### Building for Production
+
+```bash
+cd prokube/app-prefixable
 bun run build
 ```
 
-### Building the Docker Image
+## CI/CD
 
-```bash
-cd prokube/docker
-make build          # Build the image
-make push           # Push to registry
-make build-push     # Build and push
-```
-
-### Testing Locally
-
-```bash
-# Start OpenCode API server (in separate terminal)
-cd packages/opencode
-bun dev
-
-# Start UI dev server
-cd prokube/app-prefixable
-bun run dev
-```
+Docker image builds and cluster deployments are handled by **GitLab CI**. Do not build Docker images locally - push your changes and let the CI pipeline handle it.
 
 ## Code Guidelines
 
@@ -172,20 +178,9 @@ git push -u origin feature/branch-name
 - `docs(prokube):` Documentation
 - `chore(prokube):` Maintenance
 
-## Deployment
+## Cluster Debugging
 
-### Building for Kubeflow
-
-```bash
-cd prokube/docker
-make build-push
-```
-
-### Deploying to Cluster
-
-The image runs as a Kubeflow Notebook. The `NB_PREFIX` environment variable is set by Kubeflow.
-
-### Kubectl Access
+When debugging issues in the cluster:
 
 ```bash
 # Check pod logs
