@@ -454,7 +454,8 @@ export function Session() {
       // Start polling for completion (SSE might not work through proxy)
       waitForCompletion(id)
     } catch (err) {
-      console.error("Error sending message:", err)
+      console.error("[Session] Error sending message:", err)
+      setError(`Failed to send message: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setLoading(false)
     }

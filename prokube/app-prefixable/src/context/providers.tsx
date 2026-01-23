@@ -1,6 +1,11 @@
-import { createContext, useContext, createResource, type ParentProps } from "solid-js"
+import { createContext, useContext, createResource, createEffect, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "./sdk"
+
+// Default model to use
+const DEFAULT_PROVIDER = "opencode"
+const DEFAULT_MODEL = "big-pickle"
+const DEFAULT_AGENT = "build"
 
 // Define types locally to avoid SDK type mismatches
 interface Model {
@@ -59,7 +64,7 @@ export function ProviderProvider(props: ParentProps) {
 
   const [store, setStore] = createStore({
     selectedModel: null as ModelKey | null,
-    selectedAgent: "code",
+    selectedAgent: DEFAULT_AGENT,
   })
 
   // Fetch providers
@@ -70,6 +75,21 @@ export function ProviderProvider(props: ParentProps) {
     } catch (e) {
       console.error("Failed to fetch providers:", e)
       return undefined
+    }
+  })
+
+  // Auto-select default model when provider data loads
+  createEffect(() => {
+    const data = providerData()
+    if (!data || store.selectedModel) return
+
+    // Check if default provider is connected
+    if (data.connected.includes(DEFAULT_PROVIDER)) {
+      const provider = data.all.find((p) => p.id === DEFAULT_PROVIDER)
+      if (provider && provider.models[DEFAULT_MODEL]) {
+        console.log("[Providers] Auto-selecting default model:", DEFAULT_PROVIDER, DEFAULT_MODEL)
+        setStore("selectedModel", { providerID: DEFAULT_PROVIDER, modelID: DEFAULT_MODEL })
+      }
     }
   })
 
@@ -146,7 +166,9 @@ export function ProviderProvider(props: ParentProps) {
       return authData() ?? {}
     },
     get agents() {
-      return (agentsData() ?? []).filter((a) => a.mode === "primary" && !a.hidden)
+      // Filter to show only useful agents: build, general, explore
+      const allowedAgents = ["build", "general", "explore"]
+      return (agentsData() ?? []).filter((a) => allowedAgents.includes(a.name) && !a.hidden)
     },
     get loading() {
       return providerData.loading || agentsData.loading
