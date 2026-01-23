@@ -21,10 +21,18 @@ const server = Bun.serve({
   idleTimeout: 0, // Disable timeout for SSE connections
   async fetch(req) {
     const url = new URL(req.url)
-    const path = url.pathname
+    let path = url.pathname
 
-    // API requests go directly to the API without base path
-    // The SDK calls these paths directly on the origin
+    // Strip base path prefix if present (for both API and frontend routes)
+    let strippedPath = path
+    if (basePathWithoutTrailing && path.startsWith(basePathWithoutTrailing)) {
+      strippedPath = path.slice(basePathWithoutTrailing.length) || "/"
+    }
+    if (!strippedPath.startsWith("/")) {
+      strippedPath = "/" + strippedPath
+    }
+
+    // API requests go directly to the API
     const apiPaths = [
       "/api",
       "/event",
@@ -41,27 +49,21 @@ const server = Bun.serve({
       "/auth",
       "/app",
       "/agent",
+      "/session",
+      "/find",
     ]
 
-    // Check if this is an API request (not a frontend route)
-    // API paths don't have the base path prefix
-    const isApiPath = apiPaths.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))
-
-    // Special handling for /session - only API if it doesn't have base path prefix
-    // Frontend routes: /opencode/session, /opencode/session/, /opencode/session/abc123
-    // API routes: /session (POST), /session/list, /session/create, etc.
-    const isSessionApi =
-      (path === "/session" || path.startsWith("/session/") || path.startsWith("/session?")) &&
-      !path.startsWith(basePathWithoutTrailing) // Not prefixed with base path = API call
-
-    const isApiRequest = isApiPath || isSessionApi
+    // Check if this is an API request using the stripped path
+    const isApiRequest = apiPaths.some(
+      (p) => strippedPath === p || strippedPath.startsWith(p + "/") || strippedPath.startsWith(p + "?"),
+    )
 
     if (isApiRequest) {
-      const target = new URL(path + url.search, API_URL)
+      const target = new URL(strippedPath + url.search, API_URL)
       const headers = new Headers(req.headers)
 
       // SSE requests - just pass through the response body directly
-      if (path.startsWith("/event")) {
+      if (strippedPath.startsWith("/event")) {
         console.log("[Proxy] SSE request to:", target.toString())
         try {
           const response = await fetch(target.toString(), {
@@ -90,7 +92,7 @@ const server = Bun.serve({
         }
       }
 
-      console.log("[Proxy] API:", req.method, path)
+      console.log("[Proxy] API:", req.method, strippedPath)
       return fetch(target.toString(), {
         method: req.method,
         headers,
@@ -98,16 +100,7 @@ const server = Bun.serve({
       })
     }
 
-    // Frontend routes - strip base path prefix for file lookup
-    let strippedPath = path
-    if (basePathWithoutTrailing && path.startsWith(basePathWithoutTrailing)) {
-      strippedPath = path.slice(basePathWithoutTrailing.length) || "/"
-    }
-    if (!strippedPath.startsWith("/")) {
-      strippedPath = "/" + strippedPath
-    }
-
-    // Try to serve static file
+    // Frontend routes - try to serve static file
     const filePath = `./dist${strippedPath}`
     const file = Bun.file(filePath)
     if (await file.exists()) {

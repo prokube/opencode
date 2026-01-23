@@ -1,6 +1,5 @@
 import { type ParentProps, createSignal, For, Show, onMount, createMemo } from "solid-js"
-import { A, useLocation, useNavigate, useParams } from "@solidjs/router"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { A, useLocation, useNavigate } from "@solidjs/router"
 import { useBasePath } from "../context/base-path"
 import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
@@ -28,108 +27,43 @@ function PkIcon(props: { class?: string }) {
 }
 
 export function Layout(props: ParentProps) {
-  const { serverUrl, basePath } = useBasePath()
+  const { basePath } = useBasePath()
   const { client, directory } = useSDK()
   const events = useEvents()
   const providers = useProviders()
   const location = useLocation()
   const navigate = useNavigate()
-  const params = useParams<{ dir: string }>()
 
   const [sessions, setSessions] = createSignal<Session[]>([])
   const [loading, setLoading] = createSignal(true)
   const [sidebarOpen, setSidebarOpen] = createSignal(true)
-  const [expandedGroups, setExpandedGroups] = createSignal<Record<string, boolean>>({})
 
   // Current directory's base64-encoded slug for URLs
   const dirSlug = createMemo(() => (directory ? base64Encode(directory) : ""))
 
-  // Group sessions by directory
-  const sessionGroups = createMemo(() => {
-    const allSessions = sessions()
-    const groups: Record<string, Session[]> = {}
-
-    // Always include the current directory, even if it has no sessions
-    if (directory) {
-      groups[directory] = []
-    }
-
-    for (const session of allSessions) {
-      const dir = session.directory || "unknown"
-      if (!groups[dir]) groups[dir] = []
-      groups[dir].push(session)
-    }
-
-    // Convert to array
-    const entries = Object.entries(groups).map(([dir, dirSessions]) => ({
-      directory: dir,
-      slug: base64Encode(dir),
-      sessions: dirSessions.sort((a, b) => (b.time?.updated || 0) - (a.time?.updated || 0)),
-    }))
-
-    // Generate unique display names
-    // If multiple directories have the same last segment, show more path
-    const lastSegments: Record<string, string[]> = {}
-    for (const entry of entries) {
-      const last = entry.directory.split("/").pop() || entry.directory
-      if (!lastSegments[last]) lastSegments[last] = []
-      lastSegments[last].push(entry.directory)
-    }
-
-    return entries
-      .map((entry) => {
-        const last = entry.directory.split("/").pop() || entry.directory
-        const duplicates = lastSegments[last] || []
-        let name = last
-        if (duplicates.length > 1) {
-          // Show parent/child for disambiguation
-          const parts = entry.directory.split("/")
-          if (parts.length >= 2) {
-            name = parts.slice(-2).join("/")
-          }
-        }
-        return { ...entry, name }
-      })
-      .sort((a, b) => {
-        // Current directory always first
-        if (a.directory === directory) return -1
-        if (b.directory === directory) return 1
-        const aTime = a.sessions[0]?.time?.updated || 0
-        const bTime = b.sessions[0]?.time?.updated || 0
-        return bTime - aTime
-      })
+  // Project name from directory
+  const projectName = createMemo(() => {
+    if (!directory) return "Project"
+    return directory.split("/").pop() || directory
   })
 
-  function isGroupExpanded(dir: string): boolean {
-    const expanded = expandedGroups()
-    if (expanded[dir] !== undefined) return expanded[dir]
-    // Default: current directory expanded
-    return dir === directory
-  }
-
-  function toggleGroup(dir: string) {
-    setExpandedGroups((prev) => ({ ...prev, [dir]: !isGroupExpanded(dir) }))
-  }
-
-  function getDirName(dir: string): string {
-    return dir.split("/").pop() || dir
-  }
+  // Filter sessions to only show current project's sessions, sorted by updated time
+  const projectSessions = createMemo(() =>
+    sessions()
+      .filter((s) => s.directory === directory)
+      .sort((a, b) => (b.time?.updated || 0) - (a.time?.updated || 0)),
+  )
 
   async function loadSessions() {
     try {
-      console.log("[Layout] Loading sessions...")
-      // Load sessions for all projects
+      console.log("[Layout] Loading sessions for:", directory)
       const res = await client.session.list({ roots: true })
-      console.log("[Layout] Sessions response:", res)
       const data = res.data
-      // Validate response is an array of sessions
       if (Array.isArray(data)) {
-        // Filter to only valid sessions with id
         const valid = data.filter((s): s is Session => s && typeof s === "object" && typeof s.id === "string")
-        console.log("[Layout] Valid sessions:", valid.length)
+        console.log("[Layout] Loaded sessions:", valid.length, "for current project:", projectSessions().length)
         setSessions(valid)
       } else {
-        console.warn("[Layout] Unexpected session.list response, not an array:", typeof data)
         setSessions([])
       }
     } catch (e) {
@@ -145,7 +79,6 @@ export function Layout(props: ParentProps) {
 
     // Subscribe to session events
     const unsub = events.subscribe((event) => {
-      console.log("[Layout] Event received:", event.type)
       if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
         loadSessions()
       }
@@ -154,31 +87,18 @@ export function Layout(props: ParentProps) {
     return unsub
   })
 
-  // Create session in a specific directory
-  async function createSessionInDirectory(targetDir: string) {
+  async function createNewSession() {
+    if (!directory) return
     try {
-      console.log("[Layout] Creating session in:", targetDir)
-      // Create a client for the target directory
-      const targetClient = createOpencodeClient({
-        baseUrl: serverUrl,
-        directory: targetDir,
-        throwOnError: true,
-      })
-      const res = await targetClient.session.create({})
-      console.log("[Layout] Create response:", res)
+      const res = await client.session.create({})
       if (res.data) {
-        const slug = base64Encode(targetDir)
-        navigate(`/${slug}/session/${res.data.id}`)
+        // Add new session to list immediately
+        setSessions((prev) => [res.data as Session, ...prev])
+        navigate(`/${dirSlug()}/session/${res.data.id}`)
       }
     } catch (e) {
       console.error("Failed to create session:", e)
     }
-  }
-
-  // Create session in current directory
-  async function createNewSession() {
-    if (!directory) return
-    await createSessionInDirectory(directory)
   }
 
   function isActive(sessionId: string) {
@@ -200,15 +120,25 @@ export function Layout(props: ParentProps) {
           "border-right": "1px solid var(--border-base)",
         }}
       >
-        {/* Logo & Collapse */}
+        {/* Header: Logo & Project Name */}
         <div class="flex items-center justify-between p-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
-          {/* PK Icon - links to home */}
-          <a href={basePath} class="shrink-0 hover:opacity-80 transition-opacity" title="Home">
-            <PkIcon class="w-7 h-7 rounded" />
-          </a>
+          <div class="flex items-center gap-2 min-w-0">
+            {/* PK Icon - links to home */}
+            <a href={basePath} class="shrink-0 hover:opacity-80 transition-opacity" title="Change Project">
+              <PkIcon class="w-7 h-7 rounded" />
+            </a>
+            {/* Project name */}
+            <Show when={sidebarOpen()}>
+              <div class="min-w-0">
+                <div class="text-sm font-medium truncate" style={{ color: "var(--text-strong)" }}>
+                  {projectName()}
+                </div>
+              </div>
+            </Show>
+          </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen())}
-            class="p-1.5 rounded transition-colors"
+            class="p-1.5 rounded transition-colors shrink-0"
             style={{ color: "var(--icon-base)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -225,7 +155,7 @@ export function Layout(props: ParentProps) {
           </button>
         </div>
 
-        {/* Session List - Grouped by Project */}
+        {/* Session List */}
         <div class="flex-1 overflow-y-auto">
           <Show when={loading()}>
             <div class="flex items-center justify-center py-8">
@@ -234,127 +164,59 @@ export function Layout(props: ParentProps) {
           </Show>
 
           <Show when={!loading() && sidebarOpen()}>
-            <div class="py-1">
-              <For each={sessionGroups()}>
-                {(group) => (
-                  <div class="mb-1">
-                    {/* Group Header */}
-                    <div class="flex items-center">
-                      <button
-                        onClick={() => toggleGroup(group.directory)}
-                        class="flex-1 flex items-center gap-2 px-3 py-1.5 text-xs font-medium transition-colors"
-                        style={{ color: "var(--text-weak)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <svg
-                          class="w-3 h-3 transition-transform"
-                          classList={{ "rotate-90": isGroupExpanded(group.directory) }}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                        <svg
-                          class="w-3 h-3"
-                          style={{ color: "var(--icon-weak)" }}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-                          />
-                        </svg>
-                        <span class="truncate flex-1 text-left">{group.name}</span>
-                        <span class="text-xs opacity-60">{group.sessions.length}</span>
-                      </button>
-                      {/* Add session button for this project */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          createSessionInDirectory(group.directory)
-                        }}
-                        class="p-1 mr-2 rounded transition-colors"
-                        style={{ color: "var(--icon-weak)" }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--surface-inset)"
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "transparent"
-                        }}
-                        title={`New session in ${group.name}`}
-                      >
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    {/* Sessions in this group */}
-                    <Show when={isGroupExpanded(group.directory)}>
-                      <div class="pl-4 pr-1.5 space-y-0.5">
-                        <Show
-                          when={group.sessions.length > 0}
-                          fallback={
-                            <div class="px-2.5 py-2 text-xs" style={{ color: "var(--text-weak)" }}>
-                              No sessions yet
-                            </div>
-                          }
-                        >
-                          <For each={group.sessions}>
-                            {(session) => (
-                              <A
-                                href={`/${group.slug}/session/${session.id}`}
-                                class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
-                                style={{
-                                  color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
-                                  background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
-                                }}
-                              >
-                                <svg
-                                  class="w-3.5 h-3.5 shrink-0"
-                                  style={{ color: "var(--icon-weak)" }}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                  />
-                                </svg>
-                                <div class="flex-1 min-w-0">
-                                  <div class="truncate text-sm">{session.title || "Untitled"}</div>
-                                </div>
-                              </A>
-                            )}
-                          </For>
-                        </Show>
-                      </div>
-                    </Show>
+            <div class="py-2 px-2 space-y-0.5">
+              <Show
+                when={projectSessions().length > 0}
+                fallback={
+                  <div class="py-6 text-center" style={{ color: "var(--text-weak)" }}>
+                    <p class="text-sm">No sessions yet</p>
+                    <p class="text-xs mt-1">Click "New Session" to start</p>
                   </div>
-                )}
-              </For>
+                }
+              >
+                <For each={projectSessions()}>
+                  {(session) => (
+                    <A
+                      href={`/${dirSlug()}/session/${session.id}`}
+                      class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
+                      style={{
+                        color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
+                        background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
+                      }}
+                    >
+                      <svg
+                        class="w-3.5 h-3.5 shrink-0"
+                        style={{ color: "var(--icon-weak)" }}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                        />
+                      </svg>
+                      <div class="flex-1 min-w-0">
+                        <div class="truncate text-sm">{session.title || "Untitled"}</div>
+                      </div>
+                    </A>
+                  )}
+                </For>
+              </Show>
             </div>
           </Show>
         </div>
 
         {/* Bottom Nav */}
         <div style={{ "border-top": "1px solid var(--border-base)" }}>
-          {/* Provider Status */}
           <Show when={sidebarOpen()}>
             <div class="p-2 space-y-1">
               {/* New Session Button */}
