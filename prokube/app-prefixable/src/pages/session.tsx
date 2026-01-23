@@ -50,6 +50,18 @@ export function Session() {
   const [loading, setLoading] = createSignal(false)
   const [processing, setProcessing] = createSignal(false)
   const [sessionId, setSessionId] = createSignal(params.id)
+
+  // Keep sessionId in sync with URL params
+  createEffect(() => {
+    const id = params.id
+    console.log("[Session] URL param changed:", id)
+    setSessionId(id)
+    if (id) {
+      loadMessages(id)
+    } else {
+      setMessages([])
+    }
+  })
   const [showModelPicker, setShowModelPicker] = createSignal(false)
   const [showAgentPicker, setShowAgentPicker] = createSignal(false)
   const [showSlashPopover, setShowSlashPopover] = createSignal(false)
@@ -317,10 +329,6 @@ export function Session() {
 
   // Subscribe to events for real-time updates
   onMount(() => {
-    if (params.id) {
-      loadMessages(params.id)
-    }
-
     const unsub = events.subscribe((event) => {
       const id = sessionId()
       if (!id) return
@@ -452,8 +460,8 @@ export function Session() {
     }
   }
 
-  // If no session ID, show welcome screen
-  if (!params.id) {
+  // Welcome screen component for when no session is selected
+  function WelcomeScreen() {
     return (
       <div class="flex flex-col h-full" style={{ background: "var(--background-stronger)" }}>
         <div class="flex flex-col items-center justify-center flex-1 text-center px-6">
@@ -595,500 +603,512 @@ export function Session() {
     )
   }
 
-  return (
-    <div class="flex flex-col h-full">
-      {/* Header */}
-      <header
-        class="flex items-center justify-between px-6 py-3"
-        style={{
-          background: "var(--background-base)",
-          "border-bottom": "1px solid var(--border-base)",
-        }}
-      >
-        <div>
-          <h1 class="text-base font-medium" style={{ color: "var(--text-strong)" }}>
-            {session()?.title || "New Session"}
-          </h1>
-          <Show when={session()}>
-            <p class="text-xs" style={{ color: "var(--text-weak)" }}>
-              {session()?.id}
-            </p>
-          </Show>
-        </div>
-
-        {/* Model & Agent Selectors */}
-        <div class="flex items-center gap-4">
-          {/* Agent Selector */}
-          <div class="relative" ref={agentPickerRef}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowAgentPicker(!showAgentPicker())
-                setShowModelPicker(false)
-              }}
-              class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
-              style={{
-                border: "1px solid var(--border-base)",
-                color: "var(--text-base)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <span class="capitalize">{providers.selectedAgent}</span>
-              <svg
-                class="w-4 h-4"
-                style={{ color: "var(--icon-weak)" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            <Show when={showAgentPicker()}>
-              <div
-                class="absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-10 overflow-hidden"
-                style={{
-                  background: "var(--background-base)",
-                  border: "1px solid var(--border-base)",
-                }}
-              >
-                <For each={providers.agents}>
-                  {(agent) => (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        providers.setSelectedAgent(agent.name)
-                        setShowAgentPicker(false)
-                      }}
-                      class="w-full px-3 py-2 text-left text-sm transition-colors"
-                      style={{
-                        color:
-                          providers.selectedAgent === agent.name ? "var(--text-interactive-base)" : "var(--text-base)",
-                        background: providers.selectedAgent === agent.name ? "var(--surface-inset)" : "transparent",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (providers.selectedAgent !== agent.name)
-                          e.currentTarget.style.background = "var(--surface-inset)"
-                      }}
-                      onMouseLeave={(e) => {
-                        if (providers.selectedAgent !== agent.name) e.currentTarget.style.background = "transparent"
-                      }}
-                    >
-                      <span class="capitalize">{agent.name}</span>
-                    </button>
-                  )}
-                </For>
-                <Show when={providers.agents.length === 0}>
-                  <div class="px-3 py-2 text-sm" style={{ color: "var(--text-weak)" }}>
-                    No agents available
-                  </div>
-                </Show>
-              </div>
+  // Chat view component
+  function ChatView() {
+    return (
+      <div class="flex flex-col h-full">
+        {/* Header */}
+        <header
+          class="flex items-center justify-between px-6 py-3"
+          style={{
+            background: "var(--background-base)",
+            "border-bottom": "1px solid var(--border-base)",
+          }}
+        >
+          <div>
+            <h1 class="text-base font-medium" style={{ color: "var(--text-strong)" }}>
+              {session()?.title || "New Session"}
+            </h1>
+            <Show when={session()}>
+              <p class="text-xs" style={{ color: "var(--text-weak)" }}>
+                {session()?.id}
+              </p>
             </Show>
           </div>
 
-          {/* Model Selector */}
-          <div class="relative" ref={modelPickerRef}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowModelPicker(!showModelPicker())
-                setShowAgentPicker(false)
-              }}
-              class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
-              style={{
-                border: "1px solid var(--border-base)",
-                color: "var(--text-base)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <span>
-                {providers.selectedModel
-                  ? `${providers.selectedModel.providerID}/${providers.selectedModel.modelID}`
-                  : "Select model"}
-              </span>
-              <svg
-                class="w-4 h-4"
-                style={{ color: "var(--icon-weak)" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            <Show when={showModelPicker()}>
-              <div
-                class="absolute right-0 top-full mt-1 w-72 max-h-96 overflow-y-auto rounded-lg shadow-lg z-10"
-                style={{
-                  background: "var(--background-base)",
-                  border: "1px solid var(--border-base)",
+          {/* Model & Agent Selectors */}
+          <div class="flex items-center gap-4">
+            {/* Agent Selector */}
+            <div class="relative" ref={agentPickerRef}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowAgentPicker(!showAgentPicker())
+                  setShowModelPicker(false)
                 }}
+                class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
+                style={{
+                  border: "1px solid var(--border-base)",
+                  color: "var(--text-base)",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
-                <Show when={providers.connected.length === 0}>
-                  <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
-                    <p>No providers connected.</p>
-                    <a
-                      href={`/${dirSlug()}/settings`}
-                      style={{ color: "var(--text-interactive-base)" }}
-                      class="hover:underline"
-                    >
-                      Connect a provider
-                    </a>
-                  </div>
-                </Show>
+                <span class="capitalize">{providers.selectedAgent}</span>
+                <svg
+                  class="w-4 h-4"
+                  style={{ color: "var(--icon-weak)" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-                <For each={providers.providers.filter((p) => providers.connected.includes(p.id))}>
-                  {(provider) => (
-                    <div>
-                      <div
-                        class="px-3 py-2 text-xs font-medium"
+              <Show when={showAgentPicker()}>
+                <div
+                  class="absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-10 overflow-hidden"
+                  style={{
+                    background: "var(--background-base)",
+                    border: "1px solid var(--border-base)",
+                  }}
+                >
+                  <For each={providers.agents}>
+                    {(agent) => (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          providers.setSelectedAgent(agent.name)
+                          setShowAgentPicker(false)
+                        }}
+                        class="w-full px-3 py-2 text-left text-sm transition-colors"
                         style={{
-                          color: "var(--text-weak)",
-                          background: "var(--surface-inset)",
-                          "border-bottom": "1px solid var(--border-base)",
+                          color:
+                            providers.selectedAgent === agent.name
+                              ? "var(--text-interactive-base)"
+                              : "var(--text-base)",
+                          background: providers.selectedAgent === agent.name ? "var(--surface-inset)" : "transparent",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (providers.selectedAgent !== agent.name)
+                            e.currentTarget.style.background = "var(--surface-inset)"
+                        }}
+                        onMouseLeave={(e) => {
+                          if (providers.selectedAgent !== agent.name) e.currentTarget.style.background = "transparent"
                         }}
                       >
-                        {provider.name}
-                      </div>
-                      <For each={Object.values(provider.models).slice(0, 10)}>
-                        {(model) => {
-                          const selected =
-                            providers.selectedModel?.providerID === provider.id &&
-                            providers.selectedModel?.modelID === model.id
-                          return (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
-                                setShowModelPicker(false)
-                              }}
-                              class="w-full px-3 py-2 text-left text-sm transition-colors"
-                              style={{
-                                color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
-                                background: selected ? "var(--surface-inset)" : "transparent",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!selected) e.currentTarget.style.background = "var(--surface-inset)"
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!selected) e.currentTarget.style.background = "transparent"
-                              }}
-                            >
-                              {model.name}
-                            </button>
-                          )
-                        }}
-                      </For>
+                        <span class="capitalize">{agent.name}</span>
+                      </button>
+                    )}
+                  </For>
+                  <Show when={providers.agents.length === 0}>
+                    <div class="px-3 py-2 text-sm" style={{ color: "var(--text-weak)" }}>
+                      No agents available
                     </div>
-                  )}
-                </For>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+
+            {/* Model Selector */}
+            <div class="relative" ref={modelPickerRef}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowModelPicker(!showModelPicker())
+                  setShowAgentPicker(false)
+                }}
+                class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
+                style={{
+                  border: "1px solid var(--border-base)",
+                  color: "var(--text-base)",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <span>
+                  {providers.selectedModel
+                    ? `${providers.selectedModel.providerID}/${providers.selectedModel.modelID}`
+                    : "Select model"}
+                </span>
+                <svg
+                  class="w-4 h-4"
+                  style={{ color: "var(--icon-weak)" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              <Show when={showModelPicker()}>
+                <div
+                  class="absolute right-0 top-full mt-1 w-72 max-h-96 overflow-y-auto rounded-lg shadow-lg z-10"
+                  style={{
+                    background: "var(--background-base)",
+                    border: "1px solid var(--border-base)",
+                  }}
+                >
+                  <Show when={providers.connected.length === 0}>
+                    <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
+                      <p>No providers connected.</p>
+                      <a
+                        href={`/${dirSlug()}/settings`}
+                        style={{ color: "var(--text-interactive-base)" }}
+                        class="hover:underline"
+                      >
+                        Connect a provider
+                      </a>
+                    </div>
+                  </Show>
+
+                  <For each={providers.providers.filter((p) => providers.connected.includes(p.id))}>
+                    {(provider) => (
+                      <div>
+                        <div
+                          class="px-3 py-2 text-xs font-medium"
+                          style={{
+                            color: "var(--text-weak)",
+                            background: "var(--surface-inset)",
+                            "border-bottom": "1px solid var(--border-base)",
+                          }}
+                        >
+                          {provider.name}
+                        </div>
+                        <For each={Object.values(provider.models).slice(0, 10)}>
+                          {(model) => {
+                            const selected =
+                              providers.selectedModel?.providerID === provider.id &&
+                              providers.selectedModel?.modelID === model.id
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
+                                  setShowModelPicker(false)
+                                }}
+                                class="w-full px-3 py-2 text-left text-sm transition-colors"
+                                style={{
+                                  color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
+                                  background: selected ? "var(--surface-inset)" : "transparent",
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!selected) e.currentTarget.style.background = "var(--surface-inset)"
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!selected) e.currentTarget.style.background = "transparent"
+                                }}
+                              >
+                                {model.name}
+                              </button>
+                            )
+                          }}
+                        </For>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </div>
+
+            {/* MCP Indicator */}
+            <Show when={mcp.stats().total > 0}>
+              <button
+                onClick={() => setShowMCPDialog(true)}
+                class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
+                style={{
+                  border: "1px solid var(--border-base)",
+                  color: "var(--text-base)",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <div
+                  class="w-2 h-2 rounded-full"
+                  style={{
+                    background: mcp.stats().failed
+                      ? "var(--icon-critical-base)"
+                      : mcp.stats().enabled > 0
+                        ? "var(--icon-success-base)"
+                        : "var(--icon-weak)",
+                  }}
+                />
+                <span>{mcp.stats().enabled} MCP</span>
+              </button>
+            </Show>
+
+            <Show when={processing()}>
+              <div class="flex items-center gap-2 text-sm" style={{ color: "var(--text-interactive-base)" }}>
+                <Spinner class="w-4 h-4" />
+                Processing...
               </div>
             </Show>
           </div>
+        </header>
 
-          {/* MCP Indicator */}
-          <Show when={mcp.stats().total > 0}>
-            <button
-              onClick={() => setShowMCPDialog(true)}
-              class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
-              style={{
-                border: "1px solid var(--border-base)",
-                color: "var(--text-base)",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
+        {/* Messages */}
+        <div class="flex-1 overflow-y-auto p-6 space-y-4" style={{ background: "var(--background-stronger)" }}>
+          <Show when={messages().length === 0 && !loading()}>
+            <div class="flex flex-col items-center justify-center h-full text-center">
               <div
-                class="w-2 h-2 rounded-full"
-                style={{
-                  background: mcp.stats().failed
-                    ? "var(--icon-critical-base)"
-                    : mcp.stats().enabled > 0
-                      ? "var(--icon-success-base)"
-                      : "var(--icon-weak)",
-                }}
-              />
-              <span>{mcp.stats().enabled} MCP</span>
-            </button>
+                class="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                style={{ background: "var(--surface-inset)" }}
+              >
+                <svg
+                  class="w-8 h-8"
+                  style={{ color: "var(--text-interactive-base)" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                  />
+                </svg>
+              </div>
+              <p class="text-lg mb-2" style={{ color: "var(--text-weak)" }}>
+                Ready to chat
+              </p>
+              <p style={{ color: "var(--text-weak)", opacity: 0.7 }}>Type a message below to begin</p>
+            </div>
           </Show>
+
+          <For each={messages()}>
+            {(message) => (
+              <div
+                class="max-w-3xl"
+                classList={{
+                  "ml-auto": message.role === "user",
+                }}
+              >
+                <div
+                  class="rounded-lg p-4"
+                  style={{
+                    background: message.role === "user" ? "var(--surface-inset)" : "var(--background-base)",
+                    border: `1px solid var(--border-base)`,
+                  }}
+                >
+                  <div class="text-xs font-medium mb-2 uppercase tracking-wide" style={{ color: "var(--text-weak)" }}>
+                    {message.role}
+                  </div>
+                  <Show when={message.error}>
+                    {(err) => (
+                      <div
+                        class="px-3 py-2 rounded text-sm mb-2"
+                        style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
+                      >
+                        <strong>Error:</strong> {err().data?.message || err().name || "Unknown error"}
+                      </div>
+                    )}
+                  </Show>
+                  <Show
+                    when={message.role === "assistant"}
+                    fallback={
+                      <div class="whitespace-pre-wrap" style={{ color: "var(--text-base)" }}>
+                        {extractTextContent(message.parts) || "..."}
+                      </div>
+                    }
+                  >
+                    <Show when={extractTextContent(message.parts) || !message.error} fallback={null}>
+                      <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
+                    </Show>
+                  </Show>
+                </div>
+              </div>
+            )}
+          </For>
 
           <Show when={processing()}>
-            <div class="flex items-center gap-2 text-sm" style={{ color: "var(--text-interactive-base)" }}>
-              <Spinner class="w-4 h-4" />
-              Processing...
-            </div>
-          </Show>
-        </div>
-      </header>
-
-      {/* Messages */}
-      <div class="flex-1 overflow-y-auto p-6 space-y-4" style={{ background: "var(--background-stronger)" }}>
-        <Show when={messages().length === 0 && !loading()}>
-          <div class="flex flex-col items-center justify-center h-full text-center">
-            <div
-              class="w-16 h-16 rounded-full flex items-center justify-center mb-4"
-              style={{ background: "var(--surface-inset)" }}
-            >
-              <svg
-                class="w-8 h-8"
-                style={{ color: "var(--text-interactive-base)" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                />
-              </svg>
-            </div>
-            <p class="text-lg mb-2" style={{ color: "var(--text-weak)" }}>
-              Ready to chat
-            </p>
-            <p style={{ color: "var(--text-weak)", opacity: 0.7 }}>Type a message below to begin</p>
-          </div>
-        </Show>
-
-        <For each={messages()}>
-          {(message) => (
-            <div
-              class="max-w-3xl"
-              classList={{
-                "ml-auto": message.role === "user",
-              }}
-            >
+            <div class="max-w-3xl">
               <div
                 class="rounded-lg p-4"
                 style={{
-                  background: message.role === "user" ? "var(--surface-inset)" : "var(--background-base)",
-                  border: `1px solid var(--border-base)`,
+                  background: "var(--background-base)",
+                  border: "1px solid var(--border-base)",
                 }}
               >
-                <div class="text-xs font-medium mb-2 uppercase tracking-wide" style={{ color: "var(--text-weak)" }}>
-                  {message.role}
+                <div class="flex items-center gap-2" style={{ color: "var(--text-weak)" }}>
+                  <Spinner class="w-4 h-4" />
+                  <span>Thinking...</span>
                 </div>
-                <Show when={message.error}>
-                  {(err) => (
-                    <div
-                      class="px-3 py-2 rounded text-sm mb-2"
-                      style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
-                    >
-                      <strong>Error:</strong> {err().data?.message || err().name || "Unknown error"}
-                    </div>
-                  )}
-                </Show>
-                <Show
-                  when={message.role === "assistant"}
-                  fallback={
-                    <div class="whitespace-pre-wrap" style={{ color: "var(--text-base)" }}>
-                      {extractTextContent(message.parts) || "..."}
-                    </div>
-                  }
-                >
-                  <Show when={extractTextContent(message.parts) || !message.error} fallback={null}>
-                    <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
-                  </Show>
-                </Show>
               </div>
             </div>
-          )}
-        </For>
+          </Show>
 
-        <Show when={processing()}>
-          <div class="max-w-3xl">
-            <div
-              class="rounded-lg p-4"
-              style={{
-                background: "var(--background-base)",
-                border: "1px solid var(--border-base)",
-              }}
-            >
-              <div class="flex items-center gap-2" style={{ color: "var(--text-weak)" }}>
-                <Spinner class="w-4 h-4" />
-                <span>Thinking...</span>
-              </div>
-            </div>
-          </div>
-        </Show>
+          <div ref={messagesEndRef} />
+        </div>
 
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div class="p-4" style={{ background: "var(--background-base)", "border-top": "1px solid var(--border-base)" }}>
-        <div class="relative max-w-3xl mx-auto">
-          {/* Slash Command Popover */}
-          <Show when={showSlashPopover() && filteredSlashCommands().length > 0}>
-            <div
-              ref={slashPopoverRef}
-              class="absolute bottom-full left-0 mb-2 w-72 rounded-lg shadow-lg z-20 overflow-hidden"
-              style={{
-                background: "var(--background-base)",
-                border: "1px solid var(--border-base)",
-              }}
-            >
+        {/* Input */}
+        <div class="p-4" style={{ background: "var(--background-base)", "border-top": "1px solid var(--border-base)" }}>
+          <div class="relative max-w-3xl mx-auto">
+            {/* Slash Command Popover */}
+            <Show when={showSlashPopover() && filteredSlashCommands().length > 0}>
               <div
-                class="px-3 py-2 text-xs font-medium"
+                ref={slashPopoverRef}
+                class="absolute bottom-full left-0 mb-2 w-72 rounded-lg shadow-lg z-20 overflow-hidden"
                 style={{
-                  color: "var(--text-weak)",
-                  background: "var(--surface-inset)",
-                  "border-bottom": "1px solid var(--border-base)",
+                  background: "var(--background-base)",
+                  border: "1px solid var(--border-base)",
                 }}
               >
-                Commands
-              </div>
-              <For each={filteredSlashCommands()}>
-                {(cmd, idx) => (
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      selectSlashCommand(cmd)
-                    }}
-                    class="w-full px-3 py-2 text-left text-sm flex items-start gap-3 transition-colors"
-                    style={{
-                      background: idx() === slashIndex() ? "var(--surface-inset)" : "transparent",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (idx() !== slashIndex()) e.currentTarget.style.background = "var(--surface-inset)"
-                    }}
-                    onMouseLeave={(e) => {
-                      if (idx() !== slashIndex()) e.currentTarget.style.background = "transparent"
-                    }}
-                  >
-                    <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
-                      /{cmd.slash}
-                    </span>
-                    <div class="flex-1">
-                      <div class="font-medium" style={{ color: "var(--text-strong)" }}>
-                        {cmd.title}
-                      </div>
-                      <Show when={cmd.description}>
-                        <div class="text-xs" style={{ color: "var(--text-weak)" }}>
-                          {cmd.description}
-                        </div>
-                      </Show>
-                    </div>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
-
-          {/* Error message */}
-          <Show when={error()}>
-            <div
-              class="px-4 py-2 rounded-lg text-sm mb-2"
-              style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
-            >
-              {error()}
-            </div>
-          </Show>
-
-          <form onSubmit={sendMessage} class="flex gap-3">
-            <div class="flex-1 relative">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input()}
-                onInput={(e) => handleInputChange(e.currentTarget.value)}
-                onKeyDown={handleInputKeyDown}
-                placeholder="Type a message or / for commands..."
-                class="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none"
-                style={
-                  {
-                    background: "var(--background-base)",
-                    border: "1px solid var(--border-base)",
-                    color: "var(--text-base)",
-                    "--tw-ring-color": "var(--interactive-base)",
-                  } as any
-                }
-                disabled={loading() || processing()}
-              />
-              {/* Hint for slash commands */}
-              <Show when={!input() && !loading() && !processing()}>
-                <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--text-weak)" }}>
-                  Type{" "}
-                  <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
-                    /
-                  </span>{" "}
-                  for commands
+                <div
+                  class="px-3 py-2 text-xs font-medium"
+                  style={{
+                    color: "var(--text-weak)",
+                    background: "var(--surface-inset)",
+                    "border-bottom": "1px solid var(--border-base)",
+                  }}
+                >
+                  Commands
                 </div>
-              </Show>
-            </div>
-            <Button type="submit" disabled={loading() || processing() || !input().trim() || showSlashPopover()}>
-              <Show when={loading()} fallback="Send">
-                <Spinner class="w-4 h-4" />
-              </Show>
-            </Button>
-          </form>
-
-          {/* Current model/agent indicator */}
-          <div class="flex items-center gap-4 mt-2 text-xs" style={{ color: "var(--text-weak)" }}>
-            <Show when={providers.selectedAgent}>
-              <span>
-                Agent:{" "}
-                <span class="font-medium capitalize" style={{ color: "var(--text-base)" }}>
-                  {providers.selectedAgent}
-                </span>
-              </span>
+                <For each={filteredSlashCommands()}>
+                  {(cmd, idx) => (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        selectSlashCommand(cmd)
+                      }}
+                      class="w-full px-3 py-2 text-left text-sm flex items-start gap-3 transition-colors"
+                      style={{
+                        background: idx() === slashIndex() ? "var(--surface-inset)" : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (idx() !== slashIndex()) e.currentTarget.style.background = "var(--surface-inset)"
+                      }}
+                      onMouseLeave={(e) => {
+                        if (idx() !== slashIndex()) e.currentTarget.style.background = "transparent"
+                      }}
+                    >
+                      <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
+                        /{cmd.slash}
+                      </span>
+                      <div class="flex-1">
+                        <div class="font-medium" style={{ color: "var(--text-strong)" }}>
+                          {cmd.title}
+                        </div>
+                        <Show when={cmd.description}>
+                          <div class="text-xs" style={{ color: "var(--text-weak)" }}>
+                            {cmd.description}
+                          </div>
+                        </Show>
+                      </div>
+                    </button>
+                  )}
+                </For>
+              </div>
             </Show>
-            <Show when={providers.selectedModel}>
-              {(model) => (
+
+            {/* Error message */}
+            <Show when={error()}>
+              <div
+                class="px-4 py-2 rounded-lg text-sm mb-2"
+                style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
+              >
+                {error()}
+              </div>
+            </Show>
+
+            <form onSubmit={sendMessage} class="flex gap-3">
+              <div class="flex-1 relative">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input()}
+                  onInput={(e) => handleInputChange(e.currentTarget.value)}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder="Type a message or / for commands..."
+                  class="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none"
+                  style={
+                    {
+                      background: "var(--background-base)",
+                      border: "1px solid var(--border-base)",
+                      color: "var(--text-base)",
+                      "--tw-ring-color": "var(--interactive-base)",
+                    } as any
+                  }
+                  disabled={loading() || processing()}
+                />
+                {/* Hint for slash commands */}
+                <Show when={!input() && !loading() && !processing()}>
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--text-weak)" }}>
+                    Type{" "}
+                    <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
+                      /
+                    </span>{" "}
+                    for commands
+                  </div>
+                </Show>
+              </div>
+              <Button type="submit" disabled={loading() || processing() || !input().trim() || showSlashPopover()}>
+                <Show when={loading()} fallback="Send">
+                  <Spinner class="w-4 h-4" />
+                </Show>
+              </Button>
+            </form>
+
+            {/* Current model/agent indicator */}
+            <div class="flex items-center gap-4 mt-2 text-xs" style={{ color: "var(--text-weak)" }}>
+              <Show when={providers.selectedAgent}>
                 <span>
-                  Model:{" "}
-                  <span class="font-medium" style={{ color: "var(--text-base)" }}>
-                    {model().providerID}/{model().modelID}
+                  Agent:{" "}
+                  <span class="font-medium capitalize" style={{ color: "var(--text-base)" }}>
+                    {providers.selectedAgent}
                   </span>
                 </span>
-              )}
-            </Show>
-            <Show when={!providers.selectedModel && providers.connected.length === 0}>
-              <a
-                href={`/${dirSlug()}/settings`}
-                style={{ color: "var(--text-interactive-base)" }}
-                class="hover:underline"
-              >
-                Connect a provider to start
-              </a>
-            </Show>
-            <Show when={!providers.selectedModel && providers.connected.length > 0}>
-              <span style={{ color: "var(--status-warning-text)" }}>
-                No model selected - click the model button in the header to choose one
-              </span>
-            </Show>
+              </Show>
+              <Show when={providers.selectedModel}>
+                {(model) => (
+                  <span>
+                    Model:{" "}
+                    <span class="font-medium" style={{ color: "var(--text-base)" }}>
+                      {model().providerID}/{model().modelID}
+                    </span>
+                  </span>
+                )}
+              </Show>
+              <Show when={!providers.selectedModel && providers.connected.length === 0}>
+                <a
+                  href={`/${dirSlug()}/settings`}
+                  style={{ color: "var(--text-interactive-base)" }}
+                  class="hover:underline"
+                >
+                  Connect a provider to start
+                </a>
+              </Show>
+              <Show when={!providers.selectedModel && providers.connected.length > 0}>
+                <span style={{ color: "var(--status-warning-text)" }}>
+                  No model selected - click the model button in the header to choose one
+                </span>
+              </Show>
+            </div>
           </div>
         </div>
+
+        {/* MCP Dialogs */}
+        <Show when={showMCPDialog()}>
+          <MCPDialog
+            onClose={() => setShowMCPDialog(false)}
+            onAddServer={() => {
+              setShowMCPDialog(false)
+              setShowMCPAddDialog(true)
+            }}
+          />
+        </Show>
+
+        <Show when={showMCPAddDialog()}>
+          <MCPAddDialog
+            onClose={() => setShowMCPAddDialog(false)}
+            onBack={() => {
+              setShowMCPAddDialog(false)
+              setShowMCPDialog(true)
+            }}
+          />
+        </Show>
       </div>
+    )
+  }
 
-      {/* MCP Dialogs */}
-      <Show when={showMCPDialog()}>
-        <MCPDialog
-          onClose={() => setShowMCPDialog(false)}
-          onAddServer={() => {
-            setShowMCPDialog(false)
-            setShowMCPAddDialog(true)
-          }}
-        />
-      </Show>
-
-      <Show when={showMCPAddDialog()}>
-        <MCPAddDialog
-          onClose={() => setShowMCPAddDialog(false)}
-          onBack={() => {
-            setShowMCPAddDialog(false)
-            setShowMCPDialog(true)
-          }}
-        />
-      </Show>
-    </div>
+  // Use Show to reactively switch between welcome and chat views
+  return (
+    <Show when={sessionId()} fallback={<WelcomeScreen />}>
+      <ChatView />
+    </Show>
   )
 }
