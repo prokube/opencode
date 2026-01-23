@@ -158,9 +158,6 @@ git add prokube/app-prefixable/src/pages/session.tsx
 
 # Commit with descriptive message
 git commit -m "fix(prokube): description of what changed"
-
-# Push immediately
-git push -u origin feature/branch-name
 ```
 
 ### Commit Message Format
@@ -170,6 +167,14 @@ git push -u origin feature/branch-name
 - `refactor(prokube):` Code restructure
 - `docs(prokube):` Documentation
 - `chore(prokube):` Maintenance
+
+### When to Push
+
+**Do NOT push automatically after every commit.** Pushing triggers CI builds.
+
+- **Push only** when the user explicitly requests it, or when a feature is complete and ready for testing in the cluster
+- For local development and testing, commit locally but wait for user approval before pushing
+- If unsure, ask the user: "Should I push these changes now?"
 
 ## Cluster Debugging
 
@@ -221,5 +226,5 @@ curl http://127.0.0.1:4096/session/<session-id>/message
 When ending a work session:
 
 1. **Commit changes**: Stage specific files, commit with clear message
-2. **Push to remote**: `git push` - work is NOT complete until push succeeds
+2. **Ask before pushing**: Only push if user confirms or explicitly requests it
 3. **Provide context**: Summarize what was done and what's next
