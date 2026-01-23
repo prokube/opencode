@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, Show, onMount } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "../context/base-path"
@@ -24,13 +24,11 @@ function PkIcon(props: { class?: string }) {
   )
 }
 
-// Default directory for Kubeflow notebooks
-const DEFAULT_DIRECTORY = "/home/jovyan"
-
 export function ProjectPicker() {
   const { serverUrl } = useBasePath()
   const navigate = useNavigate()
 
+  const [homeDirectory, setHomeDirectory] = createSignal<string | null>(null)
   const [folderPath, setFolderPath] = createSignal("")
   const [folderSearch, setFolderSearch] = createSignal("")
   const [searchResults, setSearchResults] = createSignal<string[]>([])
@@ -40,13 +38,26 @@ export function ProjectPicker() {
   // Create a client without directory to fetch global data
   const client = createOpencodeClient({ baseUrl: serverUrl, throwOnError: false })
 
+  // Fetch home directory from server on mount
+  onMount(async () => {
+    try {
+      const res = await client.path.get()
+      if (res.data?.home) {
+        setHomeDirectory(res.data.home)
+      }
+    } catch (e) {
+      console.error("Failed to fetch path info:", e)
+    }
+  })
+
   function selectProject(worktree: string) {
     navigate(`/${base64Encode(worktree)}/session`)
   }
 
   // Search for folders
   async function searchFolders(query: string) {
-    if (!query.trim()) {
+    const home = homeDirectory()
+    if (!query.trim() || !home) {
       setSearchResults([])
       return
     }
@@ -54,13 +65,13 @@ export function ProjectPicker() {
     setSearching(true)
     try {
       const res = await client.find.files({
-        directory: DEFAULT_DIRECTORY,
+        directory: home,
         query: query,
         type: "directory",
         limit: 20,
       })
       const results = res.data ?? []
-      setSearchResults(results.map((r) => `${DEFAULT_DIRECTORY}/${r}`.replace(/\/+/g, "/")))
+      setSearchResults(results.map((r) => `${home}/${r}`.replace(/\/+/g, "/")))
     } catch (e) {
       console.error("Failed to search folders:", e)
       setSearchResults([])
@@ -71,9 +82,10 @@ export function ProjectPicker() {
 
   // Create a new folder - just navigate to it
   function createFolder() {
+    const home = homeDirectory()
     const name = newFolderName().trim()
-    if (!name) return
-    const fullPath = `${DEFAULT_DIRECTORY}/${name}`.replace(/\/+/g, "/")
+    if (!name || !home) return
+    const fullPath = `${home}/${name}`.replace(/\/+/g, "/")
     selectProject(fullPath)
   }
 
@@ -124,7 +136,7 @@ export function ProjectPicker() {
                 setFolderSearch(e.currentTarget.value)
                 searchFolders(e.currentTarget.value)
               }}
-              placeholder="Type to search in /home/jovyan..."
+              placeholder={`Type to search in ${homeDirectory() ?? "..."}...`}
               class="w-full px-3 py-2 rounded-md text-sm"
               style={{
                 background: "var(--background-stronger)",
@@ -227,25 +239,27 @@ export function ProjectPicker() {
                 Create
               </Button>
             </div>
-            <Show when={newFolderName().trim()}>
+            <Show when={newFolderName().trim() && homeDirectory()}>
               <p class="mt-2 text-xs" style={{ color: "var(--text-weak)" }}>
-                Will open: {DEFAULT_DIRECTORY}/{newFolderName()}
+                Will open: {homeDirectory()}/{newFolderName()}
               </p>
             </Show>
           </div>
 
           {/* Quick access to home directory */}
-          <div class="text-center">
-            <button
-              onClick={() => selectProject(DEFAULT_DIRECTORY)}
-              class="text-sm transition-colors"
-              style={{ color: "var(--text-interactive-base)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-            >
-              Open home directory ({DEFAULT_DIRECTORY})
-            </button>
-          </div>
+          <Show when={homeDirectory()}>
+            <div class="text-center">
+              <button
+                onClick={() => selectProject(homeDirectory()!)}
+                class="text-sm transition-colors"
+                style={{ color: "var(--text-interactive-base)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+              >
+                Open home directory ({homeDirectory()})
+              </button>
+            </div>
+          </Show>
         </div>
       </main>
     </div>
