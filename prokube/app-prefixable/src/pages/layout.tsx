@@ -28,7 +28,7 @@ function PkIcon(props: { class?: string }) {
 }
 
 export function Layout(props: ParentProps) {
-  const { serverUrl } = useBasePath()
+  const { serverUrl, basePath } = useBasePath()
   const { client, directory } = useSDK()
   const events = useEvents()
   const providers = useProviders()
@@ -48,6 +48,11 @@ export function Layout(props: ParentProps) {
   const sessionGroups = createMemo(() => {
     const allSessions = sessions()
     const groups: Record<string, Session[]> = {}
+
+    // Always include the current directory, even if it has no sessions
+    if (directory) {
+      groups[directory] = []
+    }
 
     for (const session of allSessions) {
       const dir = session.directory || "unknown"
@@ -86,6 +91,9 @@ export function Layout(props: ParentProps) {
         return { ...entry, name }
       })
       .sort((a, b) => {
+        // Current directory always first
+        if (a.directory === directory) return -1
+        if (b.directory === directory) return 1
         const aTime = a.sessions[0]?.time?.updated || 0
         const bTime = b.sessions[0]?.time?.updated || 0
         return bTime - aTime
@@ -195,7 +203,7 @@ export function Layout(props: ParentProps) {
         {/* Logo & Collapse */}
         <div class="flex items-center justify-between p-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
           {/* PK Icon - links to home */}
-          <a href="/" class="shrink-0 hover:opacity-80 transition-opacity" title="Home">
+          <a href={basePath} class="shrink-0 hover:opacity-80 transition-opacity" title="Home">
             <PkIcon class="w-7 h-7 rounded" />
           </a>
           <button
@@ -290,68 +298,56 @@ export function Layout(props: ParentProps) {
                     {/* Sessions in this group */}
                     <Show when={isGroupExpanded(group.directory)}>
                       <div class="pl-4 pr-1.5 space-y-0.5">
-                        <For each={group.sessions}>
-                          {(session) => (
-                            <A
-                              href={`/${group.slug}/session/${session.id}`}
-                              class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
-                              style={{
-                                color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
-                                background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
-                              }}
-                            >
-                              <svg
-                                class="w-3.5 h-3.5 shrink-0"
-                                style={{ color: "var(--icon-weak)" }}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                        <Show
+                          when={group.sessions.length > 0}
+                          fallback={
+                            <div class="px-2.5 py-2 text-xs" style={{ color: "var(--text-weak)" }}>
+                              No sessions yet
+                            </div>
+                          }
+                        >
+                          <For each={group.sessions}>
+                            {(session) => (
+                              <A
+                                href={`/${group.slug}/session/${session.id}`}
+                                class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
+                                style={{
+                                  color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
+                                  background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
+                                }}
                               >
-                                <path
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                  stroke-width="2"
-                                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                />
-                              </svg>
-                              <div class="flex-1 min-w-0">
-                                <div class="truncate text-sm">{session.title || "Untitled"}</div>
-                              </div>
-                            </A>
-                          )}
-                        </For>
+                                <svg
+                                  class="w-3.5 h-3.5 shrink-0"
+                                  style={{ color: "var(--icon-weak)" }}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                  />
+                                </svg>
+                                <div class="flex-1 min-w-0">
+                                  <div class="truncate text-sm">{session.title || "Untitled"}</div>
+                                </div>
+                              </A>
+                            )}
+                          </For>
+                        </Show>
                       </div>
                     </Show>
                   </div>
                 )}
               </For>
-
-              <Show when={sessions().length === 0}>
-                <div class="px-3 py-6 text-center">
-                  <p class="text-sm mb-3" style={{ color: "var(--text-weak)" }}>
-                    No sessions yet
-                  </p>
-                  <button
-                    onClick={createNewSession}
-                    class="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
-                    style={{
-                      background: "var(--surface-interactive-base)",
-                      color: "var(--text-interactive-base)",
-                    }}
-                  >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    New Session
-                  </button>
-                </div>
-              </Show>
             </div>
           </Show>
         </div>
