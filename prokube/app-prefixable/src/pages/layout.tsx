@@ -34,15 +34,6 @@ function getInitials(name: string): string {
     .join("")
 }
 
-function getColorFromString(str: string): string {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 60%, 45%)`
-}
-
 // Prokube Logo
 function PkIcon(props: { class?: string }) {
   return (
@@ -64,15 +55,20 @@ function PkIcon(props: { class?: string }) {
 function ProjectAvatar(props: { project: Project; size?: "small" | "large"; selected?: boolean }) {
   const name = () => props.project.name || getFilename(props.project.worktree)
   const initials = () => getInitials(name())
-  const color = () => getColorFromString(props.project.worktree)
   const size = () => (props.size === "large" ? "w-10 h-10" : "w-8 h-8")
 
+  // Use accent color with transparency for background, stronger for selected
   return (
     <div
-      class={`${size()} rounded-lg flex items-center justify-center text-white font-medium text-sm shrink-0 transition-all`}
+      class={`${size()} rounded-lg flex items-center justify-center font-medium text-sm shrink-0 transition-all`}
       style={{
-        background: color(),
-        border: props.selected ? "2px solid var(--text-strong)" : "2px solid transparent",
+        background: props.selected
+          ? "var(--interactive-base)"
+          : "color-mix(in srgb, var(--interactive-base) 20%, transparent)",
+        color: props.selected ? "white" : "var(--interactive-base)",
+        border: props.selected
+          ? "2px solid var(--interactive-base)"
+          : "2px solid color-mix(in srgb, var(--interactive-base) 40%, transparent)",
       }}
     >
       {initials()}

@@ -1,11 +1,8 @@
 import { Router, Route, Navigate } from "@solidjs/router"
 import { BasePathProvider, useBasePath } from "./context/base-path"
-import { SDKProvider } from "./context/sdk"
-import { EventProvider } from "./context/events"
-import { ProviderProvider } from "./context/providers"
 import { CommandProvider } from "./context/command"
 import { DirectoryLayout } from "./pages/directory-layout"
-import { Home } from "./pages/home"
+import { HomeLayout } from "./pages/home-layout"
 import { Session } from "./pages/session"
 import { Settings } from "./pages/settings"
 import { ProjectPicker } from "./pages/project-picker"
@@ -16,8 +13,10 @@ function AppRoutes() {
 
   return (
     <Router base={base}>
-      {/* Root: Show project picker or redirect to last project */}
-      <Route path="/" component={ProjectPicker} />
+      {/* Root: Show project picker with sidebar */}
+      <Route path="/" component={HomeLayout}>
+        <Route path="/" component={ProjectPicker} />
+      </Route>
 
       {/* Directory-scoped routes */}
       <Route path="/:dir" component={DirectoryLayout}>
