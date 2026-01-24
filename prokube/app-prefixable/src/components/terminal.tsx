@@ -1,4 +1,4 @@
-import { onMount, onCleanup, createSignal } from "solid-js"
+import { onMount, onCleanup, createEffect } from "solid-js"
 import { Terminal as XTerm } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import "@xterm/xterm/css/xterm.css"
@@ -15,8 +15,6 @@ export function Terminal(props: TerminalProps) {
   let term: XTerm | undefined
   let fitAddon: FitAddon | undefined
   let ws: WebSocket | undefined
-  const [connected, setConnected] = createSignal(false)
-  const [error, setError] = createSignal<string | null>(null)
 
   onMount(() => {
     // Create terminal
@@ -40,7 +38,9 @@ export function Terminal(props: TerminalProps) {
 
     // Open terminal in container
     term.open(container)
-    fitAddon.fit()
+
+    // Delay fit to ensure container is sized
+    setTimeout(() => fitAddon?.fit(), 50)
 
     // Connect WebSocket
     const wsUrl =
@@ -48,29 +48,30 @@ export function Terminal(props: TerminalProps) {
     ws = new WebSocket(wsUrl)
 
     ws.addEventListener("open", () => {
-      setConnected(true)
-      setError(null)
-      // Send initial size
-      client.pty
-        .update({
-          ptyID: props.ptyId,
-          size: { cols: term!.cols, rows: term!.rows },
-        })
-        .catch(() => {})
+      // Send initial size after a small delay to ensure terminal is fitted
+      setTimeout(() => {
+        if (term && ws?.readyState === WebSocket.OPEN) {
+          client.pty
+            .update({
+              ptyID: props.ptyId,
+              size: { cols: term.cols, rows: term.rows },
+            })
+            .catch(() => {})
+        }
+      }, 100)
     })
 
     ws.addEventListener("message", (event) => {
       term?.write(event.data)
     })
 
-    ws.addEventListener("error", () => {
-      setError("Connection error")
+    ws.addEventListener("error", (e) => {
+      console.error("[Terminal] WebSocket error:", e)
     })
 
     ws.addEventListener("close", (event) => {
-      setConnected(false)
       if (event.code !== 1000) {
-        setError(`Disconnected (${event.code})`)
+        console.warn("[Terminal] WebSocket closed:", event.code, event.reason)
       }
     })
 
@@ -94,14 +95,23 @@ export function Terminal(props: TerminalProps) {
     })
 
     // Window resize handler
-    const handleResize = () => fitAddon?.fit()
+    const handleResize = () => {
+      setTimeout(() => fitAddon?.fit(), 10)
+    }
     window.addEventListener("resize", handleResize)
+
+    // Use ResizeObserver to detect container size changes
+    const resizeObserver = new ResizeObserver(() => {
+      setTimeout(() => fitAddon?.fit(), 10)
+    })
+    resizeObserver.observe(container)
 
     // Focus terminal
     term.focus()
 
     onCleanup(() => {
       window.removeEventListener("resize", handleResize)
+      resizeObserver.disconnect()
       ws?.close()
       term?.dispose()
     })

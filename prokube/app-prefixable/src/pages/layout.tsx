@@ -426,14 +426,16 @@ export function Layout(props: ParentProps) {
           {props.children}
         </main>
 
-        {/* Terminal Panel */}
-        <Show when={terminal.opened() && terminal.active()}>
+        {/* Terminal Panel - always rendered when sessions exist, visibility controlled by CSS */}
+        <Show when={terminal.sessions().length > 0}>
           <div
             class="flex flex-col"
             style={{
-              height: `${terminal.height()}px`,
-              "border-top": "1px solid var(--border-base)",
+              height: terminal.opened() ? `${terminal.height()}px` : "0px",
+              overflow: "hidden",
+              "border-top": terminal.opened() ? "1px solid var(--border-base)" : "none",
               background: "var(--background-base)",
+              transition: "height 0.15s ease-out",
             }}
           >
             {/* Terminal Header */}
@@ -516,9 +518,14 @@ export function Layout(props: ParentProps) {
             <div class="flex-1 overflow-hidden">
               <For each={terminal.sessions()}>
                 {(session) => (
-                  <Show when={terminal.active() === session.id}>
+                  <div
+                    class="size-full"
+                    style={{
+                      display: terminal.active() === session.id ? "block" : "none",
+                    }}
+                  >
                     <Terminal ptyId={session.id} />
-                  </Show>
+                  </div>
                 )}
               </For>
             </div>
