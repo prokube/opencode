@@ -4,6 +4,7 @@ import { SDKProvider } from "../context/sdk"
 import { EventProvider } from "../context/events"
 import { ProviderProvider } from "../context/providers"
 import { MCPProvider } from "../context/mcp"
+import { TerminalProvider } from "../context/terminal"
 import { base64Decode } from "../utils/path"
 import { Layout } from "./layout"
 
@@ -29,7 +30,9 @@ export function DirectoryLayout(props: ParentProps) {
           <EventProvider>
             <ProviderProvider>
               <MCPProvider>
-                <Layout>{props.children}</Layout>
+                <TerminalProvider>
+                  <Layout>{props.children}</Layout>
+                </TerminalProvider>
               </MCPProvider>
             </ProviderProvider>
           </EventProvider>

@@ -1,11 +1,13 @@
-import { type ParentProps, createSignal, For, Show, onMount, createMemo } from "solid-js"
+import { type ParentProps, createSignal, For, Show, onMount, createMemo, onCleanup } from "solid-js"
 import { A, useLocation, useNavigate } from "@solidjs/router"
 import { useBasePath } from "../context/base-path"
 import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
 import { useProviders } from "../context/providers"
+import { useTerminal } from "../context/terminal"
 import { base64Encode } from "../utils/path"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Terminal } from "../components/terminal"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 
 // Prokube icon (PK logo)
@@ -31,6 +33,7 @@ export function Layout(props: ParentProps) {
   const { client, directory } = useSDK()
   const events = useEvents()
   const providers = useProviders()
+  const terminal = useTerminal()
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -84,7 +87,19 @@ export function Layout(props: ParentProps) {
       }
     })
 
-    return unsub
+    // Keyboard shortcut: Ctrl+` to toggle terminal
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.ctrlKey && e.key === "`") {
+        e.preventDefault()
+        terminal.toggle()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+
+    onCleanup(() => {
+      unsub()
+      window.removeEventListener("keydown", handleKeyDown)
+    })
   })
 
   async function createNewSession() {
@@ -239,6 +254,39 @@ export function Layout(props: ParentProps) {
                 New Session
               </button>
 
+              {/* Terminal Button */}
+              <button
+                onClick={() => terminal.toggle()}
+                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
+                style={{
+                  color: terminal.opened() ? "var(--text-interactive-base)" : "var(--text-base)",
+                  background: terminal.opened() ? "var(--surface-inset)" : "transparent",
+                }}
+                onMouseEnter={(e) => {
+                  if (!terminal.opened()) e.currentTarget.style.background = "var(--surface-inset)"
+                }}
+                onMouseLeave={(e) => {
+                  if (!terminal.opened()) e.currentTarget.style.background = "transparent"
+                }}
+              >
+                <svg
+                  class="w-4 h-4"
+                  style={{ color: "var(--icon-base)" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                Terminal
+                <span class="ml-auto text-xs opacity-50">Ctrl+`</span>
+              </button>
+
               {/* Settings Link */}
               <A
                 href={`/${dirSlug()}/settings`}
@@ -312,6 +360,30 @@ export function Layout(props: ParentProps) {
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
               </button>
+              <button
+                onClick={() => terminal.toggle()}
+                class="flex items-center justify-center w-full p-1.5 rounded-md transition-colors"
+                style={{
+                  color: terminal.opened() ? "var(--text-interactive-base)" : "var(--icon-base)",
+                  background: terminal.opened() ? "var(--surface-inset)" : "transparent",
+                }}
+                onMouseEnter={(e) => {
+                  if (!terminal.opened()) e.currentTarget.style.background = "var(--surface-inset)"
+                }}
+                onMouseLeave={(e) => {
+                  if (!terminal.opened()) e.currentTarget.style.background = "transparent"
+                }}
+                title="Terminal (Ctrl+`)"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+              </button>
               <A
                 href={`/${dirSlug()}/settings`}
                 class="flex items-center justify-center p-1.5 rounded-md transition-colors"
@@ -347,10 +419,112 @@ export function Layout(props: ParentProps) {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main class="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--background-stronger)" }}>
-        {props.children}
-      </main>
+      {/* Main Content + Terminal */}
+      <div class="flex-1 flex flex-col overflow-hidden">
+        {/* Main Content */}
+        <main class="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--background-stronger)" }}>
+          {props.children}
+        </main>
+
+        {/* Terminal Panel */}
+        <Show when={terminal.opened() && terminal.active()}>
+          <div
+            class="flex flex-col"
+            style={{
+              height: `${terminal.height()}px`,
+              "border-top": "1px solid var(--border-base)",
+              background: "var(--background-base)",
+            }}
+          >
+            {/* Terminal Header */}
+            <div
+              class="flex items-center justify-between px-3 py-1.5 shrink-0"
+              style={{ "border-bottom": "1px solid var(--border-base)" }}
+            >
+              <div class="flex items-center gap-2">
+                {/* Terminal tabs */}
+                <For each={terminal.sessions()}>
+                  {(session) => (
+                    <div
+                      onClick={() => terminal.setActive(session.id)}
+                      class="flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors cursor-pointer"
+                      style={{
+                        background: terminal.active() === session.id ? "var(--surface-inset)" : "transparent",
+                        color: terminal.active() === session.id ? "var(--text-strong)" : "var(--text-weak)",
+                      }}
+                    >
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                      {session.title}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          terminal.close(session.id)
+                        }}
+                        class="ml-1 p-0.5 rounded hover:bg-white/10"
+                        style={{ color: "var(--icon-weak)" }}
+                      >
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                </For>
+                {/* New terminal button */}
+                <button
+                  onClick={() => terminal.create()}
+                  class="p-1 rounded transition-colors"
+                  style={{ color: "var(--icon-weak)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  title="New Terminal"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Close button */}
+              <button
+                onClick={() => terminal.toggle()}
+                class="p-1 rounded transition-colors"
+                style={{ color: "var(--icon-weak)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                title="Close Terminal"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Terminal Content */}
+            <div class="flex-1 overflow-hidden">
+              <For each={terminal.sessions()}>
+                {(session) => (
+                  <Show when={terminal.active() === session.id}>
+                    <Terminal ptyId={session.id} />
+                  </Show>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
+      </div>
     </div>
   )
 }
