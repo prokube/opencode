@@ -6,13 +6,18 @@ import { base64Encode } from "../utils/path"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Button } from "@opencode-ai/ui/button"
 
-// OpenCode Logo
+// OpenCode Logo (official mark)
 function OpenCodeLogo(props: { class?: string }) {
   return (
-    <svg class={props.class} viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect width="100" height="100" rx="20" fill="currentColor" />
-      <path d="M30 35L45 50L30 65" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M55 65H70" stroke="white" stroke-width="8" stroke-linecap="round" />
+    <svg class={props.class} viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="512" height="512" rx="64" fill="currentColor" />
+      <path d="M320 224V352H192V224H320Z" fill="rgba(255,255,255,0.4)" />
+      <path
+        fill-rule="evenodd"
+        clip-rule="evenodd"
+        d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z"
+        fill="white"
+      />
     </svg>
   )
 }
@@ -141,7 +146,7 @@ export function ProjectPicker() {
             >
               <ProkubeLogo class="w-5 h-5 rounded" />
               <span class="font-medium" style={{ color: "var(--text-strong)" }}>
-                Prokube
+                prokube
               </span>
             </a>
           </div>
