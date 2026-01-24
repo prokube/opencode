@@ -160,7 +160,7 @@ export function ProjectPicker() {
         {/* Logo and Title */}
         <div class="text-center mb-8">
           <div class="flex justify-center mb-6">
-            <OpenCodeWordmark class="h-12" />
+            <OpenCodeWordmark class="h-16" />
           </div>
           <div class="flex items-center justify-center gap-2 mb-3" style={{ color: "var(--text-weak)" }}>
             <span>Powered by</span>
@@ -279,7 +279,7 @@ export function ProjectPicker() {
               }}
               onKeyDown={(e) => e.key === "Enter" && createFolder()}
             />
-            <Button onClick={createFolder} variant="primary" disabled={!newFolderName().trim()}>
+            <Button onClick={createFolder} variant="primary" disabled={!newFolderName().trim() || !homeDirectory()}>
               Create
             </Button>
           </div>
