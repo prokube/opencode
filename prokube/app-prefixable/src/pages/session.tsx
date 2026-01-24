@@ -879,49 +879,72 @@ export function Session() {
           </Show>
 
           <For each={messages().filter(hasVisibleContent)}>
-            {(message) => (
-              <div
-                class="max-w-3xl"
-                classList={{
-                  "ml-auto": message.role === "user",
-                }}
-              >
+            {(message) => {
+              const text = extractTextContent(message.parts).trim()
+              const hasText = text.length > 0
+              const hasTools = message.parts.some((p) => p.type === "tool")
+              const isToolOnly = message.role === "assistant" && !hasText && hasTools && !message.error
+
+              return (
                 <div
-                  class="rounded-lg p-4"
-                  style={{
-                    background: message.role === "user" ? "var(--surface-inset)" : "var(--background-base)",
-                    border: `1px solid var(--border-base)`,
+                  class="max-w-3xl"
+                  classList={{
+                    "ml-auto": message.role === "user",
                   }}
                 >
-                  <div class="text-xs font-medium mb-2 uppercase tracking-wide" style={{ color: "var(--text-weak)" }}>
-                    {message.role}
-                  </div>
-                  <Show when={message.error}>
-                    {(err) => (
-                      <div
-                        class="px-3 py-2 rounded text-sm mb-2"
-                        style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
-                      >
-                        <strong>Error:</strong> {err().data?.message || err().name || "Unknown error"}
-                      </div>
-                    )}
-                  </Show>
-                  <Show
-                    when={message.role === "assistant"}
-                    fallback={
-                      <div class="whitespace-pre-wrap" style={{ color: "var(--text-base)" }}>
-                        {extractTextContent(message.parts) || "..."}
-                      </div>
-                    }
-                  >
-                    <Show when={extractTextContent(message.parts) || !message.error} fallback={null}>
-                      <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
-                    </Show>
+                  {/* Tool-only assistant messages: flat layout, no outer box */}
+                  <Show when={isToolOnly}>
                     <MessageParts parts={message.parts} />
                   </Show>
+
+                  {/* User messages or assistant messages with text/error: boxed layout */}
+                  <Show when={!isToolOnly}>
+                    <div
+                      class="rounded-lg p-4"
+                      style={{
+                        background: message.role === "user" ? "var(--surface-inset)" : "var(--background-base)",
+                        border: "1px solid var(--border-base)",
+                      }}
+                    >
+                      <div
+                        class="text-xs font-medium mb-2 uppercase tracking-wide"
+                        style={{ color: "var(--text-weak)" }}
+                      >
+                        {message.role}
+                      </div>
+                      <Show when={message.error}>
+                        {(err) => (
+                          <div
+                            class="px-3 py-2 rounded text-sm mb-2"
+                            style={{ background: "var(--status-danger-dim)", color: "var(--status-danger-text)" }}
+                          >
+                            <strong>Error:</strong> {err().data?.message || err().name || "Unknown error"}
+                          </div>
+                        )}
+                      </Show>
+                      <Show
+                        when={message.role === "assistant"}
+                        fallback={
+                          <div class="whitespace-pre-wrap" style={{ color: "var(--text-base)" }}>
+                            {text || "..."}
+                          </div>
+                        }
+                      >
+                        <Show when={hasText}>
+                          <Markdown content={text} class="text-gray-800" />
+                        </Show>
+                      </Show>
+                    </div>
+                    {/* Tools rendered outside the box for assistant messages with text */}
+                    <Show when={message.role === "assistant" && hasTools}>
+                      <div class="mt-2">
+                        <MessageParts parts={message.parts} />
+                      </div>
+                    </Show>
+                  </Show>
                 </div>
-              </div>
-            )}
+              )
+            }}
           </For>
 
           <Show when={processing()}>
