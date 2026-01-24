@@ -16,10 +16,13 @@ await import("./build")
 const basePathWithoutTrailing = BASE_PATH.endsWith("/") ? BASE_PATH.slice(0, -1) : BASE_PATH
 const basePathWithTrailing = BASE_PATH.endsWith("/") ? BASE_PATH : BASE_PATH + "/"
 
-const server = Bun.serve({
+// Track WebSocket connections: client ws -> backend ws
+const wsConnections = new Map<object, WebSocket>()
+
+const server = Bun.serve<{ target: string }>({
   port: PORT,
   idleTimeout: 0, // Disable timeout for SSE connections
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url)
     let path = url.pathname
 
@@ -30,6 +33,19 @@ const server = Bun.serve({
     }
     if (!strippedPath.startsWith("/")) {
       strippedPath = "/" + strippedPath
+    }
+
+    // WebSocket upgrade for /pty routes - proxy to backend
+    if (strippedPath.startsWith("/pty/") && req.headers.get("upgrade") === "websocket") {
+      const target = API_URL.replace(/^http/, "ws") + strippedPath + url.search
+      console.log("[Proxy] WebSocket upgrade:", target)
+
+      // Upgrade to WebSocket and proxy to backend
+      const upgraded = server.upgrade(req, {
+        data: { target },
+      })
+      if (upgraded) return undefined
+      return new Response("WebSocket upgrade failed", { status: 500 })
     }
 
     // API requests go directly to the API
@@ -134,6 +150,55 @@ const server = Bun.serve({
     return new Response(injected, {
       headers: { "Content-Type": "text/html" },
     })
+  },
+  websocket: {
+    open(ws) {
+      const target = ws.data.target
+      console.log("[Proxy] WebSocket client connected, connecting to backend:", target)
+
+      // Connect to backend WebSocket
+      const backend = new WebSocket(target)
+
+      backend.addEventListener("open", () => {
+        console.log("[Proxy] Backend WebSocket connected")
+      })
+
+      backend.addEventListener("message", (event) => {
+        // Forward backend messages to client
+        if (ws.readyState === 1) {
+          ws.send(event.data)
+        }
+      })
+
+      backend.addEventListener("close", (event) => {
+        console.log("[Proxy] Backend WebSocket closed:", event.code)
+        wsConnections.delete(ws)
+        if (ws.readyState === 1) {
+          ws.close(event.code, event.reason)
+        }
+      })
+
+      backend.addEventListener("error", (e) => {
+        console.error("[Proxy] Backend WebSocket error:", e)
+      })
+
+      wsConnections.set(ws, backend)
+    },
+    message(ws, message) {
+      // Forward client messages to backend
+      const backend = wsConnections.get(ws)
+      if (backend?.readyState === WebSocket.OPEN) {
+        backend.send(message)
+      }
+    },
+    close(ws, code, reason) {
+      console.log("[Proxy] Client WebSocket closed:", code)
+      const backend = wsConnections.get(ws)
+      if (backend) {
+        backend.close(code, reason)
+        wsConnections.delete(ws)
+      }
+    },
   },
 })
 

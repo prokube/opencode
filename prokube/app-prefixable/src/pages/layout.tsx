@@ -1,5 +1,5 @@
 import { type ParentProps, createSignal, For, Show, onMount, createMemo, onCleanup } from "solid-js"
-import { A, useLocation, useNavigate } from "@solidjs/router"
+import { A, useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useBasePath } from "../context/base-path"
 import { useSDK } from "../context/sdk"
 import { useEvents } from "../context/events"
@@ -7,10 +7,43 @@ import { useProviders } from "../context/providers"
 import { useTerminal } from "../context/terminal"
 import { base64Encode } from "../utils/path"
 import { Spinner } from "@opencode-ai/ui/spinner"
+import { Button } from "@opencode-ai/ui/button"
 import { Terminal } from "../components/terminal"
+import { ProjectDialog } from "../components/project-dialog"
 import type { Session } from "@opencode-ai/sdk/v2/client"
 
-// Prokube icon (PK logo)
+// Storage keys
+const PROJECTS_STORAGE_KEY = "opencode.projects"
+const SIDEBAR_EXPANDED_KEY = "opencode.sidebarExpanded"
+
+interface Project {
+  worktree: string
+  name?: string
+}
+
+function getFilename(path: string): string {
+  return path.split("/").filter(Boolean).pop() || path
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(/[-_\s]/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || "")
+    .join("")
+}
+
+function getColorFromString(str: string): string {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 60%, 45%)`
+}
+
+// Prokube Logo
 function PkIcon(props: { class?: string }) {
   return (
     <svg class={props.class} viewBox="0 0 73.87881 73.87876" xmlns="http://www.w3.org/2000/svg">
@@ -28,8 +61,96 @@ function PkIcon(props: { class?: string }) {
   )
 }
 
+function ProjectAvatar(props: { project: Project; size?: "small" | "large"; selected?: boolean }) {
+  const name = () => props.project.name || getFilename(props.project.worktree)
+  const initials = () => getInitials(name())
+  const color = () => getColorFromString(props.project.worktree)
+  const size = () => (props.size === "large" ? "w-10 h-10" : "w-8 h-8")
+
+  return (
+    <div
+      class={`${size()} rounded-lg flex items-center justify-center text-white font-medium text-sm shrink-0 transition-all`}
+      style={{
+        background: color(),
+        border: props.selected ? "2px solid var(--text-strong)" : "2px solid transparent",
+      }}
+    >
+      {initials()}
+    </div>
+  )
+}
+
+// Icons
+function PlusIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+    </svg>
+  )
+}
+
+function SettingsIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+      />
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  )
+}
+
+function TerminalIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+      />
+    </svg>
+  )
+}
+
+function ChatIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+      />
+    </svg>
+  )
+}
+
+function CloseIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  )
+}
+
+function ChevronIcon(props: { class?: string; direction: "left" | "right" | "down" }) {
+  const path = () => {
+    if (props.direction === "left") return "M15 19l-7-7 7-7"
+    if (props.direction === "right") return "M9 5l7 7-7 7"
+    return "M19 9l-7 7-7-7"
+  }
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={path()} />
+    </svg>
+  )
+}
+
 export function Layout(props: ParentProps) {
-  const { basePath } = useBasePath()
   const { client, directory } = useSDK()
   const events = useEvents()
   const providers = useProviders()
@@ -39,18 +160,84 @@ export function Layout(props: ParentProps) {
 
   const [sessions, setSessions] = createSignal<Session[]>([])
   const [loading, setLoading] = createSignal(true)
-  const [sidebarOpen, setSidebarOpen] = createSignal(true)
+  const [projects, setProjects] = createSignal<Project[]>([])
+  const [sidebarExpanded, setSidebarExpanded] = createSignal(true)
+  const [projectDialogOpen, setProjectDialogOpen] = createSignal(false)
 
-  // Current directory's base64-encoded slug for URLs
-  const dirSlug = createMemo(() => (directory ? base64Encode(directory) : ""))
+  // Load state from storage
+  onMount(() => {
+    // Load projects
+    try {
+      const stored = localStorage.getItem(PROJECTS_STORAGE_KEY)
+      if (stored) {
+        setProjects(JSON.parse(stored))
+      }
+    } catch (e) {
+      console.error("Failed to load projects:", e)
+    }
 
-  // Project name from directory
-  const projectName = createMemo(() => {
-    if (!directory) return "Project"
-    return directory.split("/").pop() || directory
+    // Load sidebar state
+    try {
+      const expanded = localStorage.getItem(SIDEBAR_EXPANDED_KEY)
+      if (expanded !== null) {
+        setSidebarExpanded(expanded === "true")
+      }
+    } catch (e) {
+      console.error("Failed to load sidebar state:", e)
+    }
+
+    // Add current directory to projects if not present
+    if (directory) {
+      addProject(directory)
+    }
   })
 
-  // Filter sessions to only show current project's sessions, sorted by updated time
+  function saveProjects(list: Project[]) {
+    setProjects(list)
+    try {
+      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(list))
+    } catch (e) {
+      console.error("Failed to save projects:", e)
+    }
+  }
+
+  function toggleSidebar() {
+    const next = !sidebarExpanded()
+    setSidebarExpanded(next)
+    try {
+      localStorage.setItem(SIDEBAR_EXPANDED_KEY, String(next))
+    } catch (e) {
+      console.error("Failed to save sidebar state:", e)
+    }
+  }
+
+  function addProject(worktree: string) {
+    const existing = projects().find((p) => p.worktree === worktree)
+    if (!existing) {
+      saveProjects([...projects(), { worktree }])
+    }
+  }
+
+  function removeProject(worktree: string) {
+    saveProjects(projects().filter((p) => p.worktree !== worktree))
+  }
+
+  function handleProjectSelect(worktree: string) {
+    addProject(worktree)
+    navigate(`/${base64Encode(worktree)}/session`)
+  }
+
+  const currentProject = createMemo(() => projects().find((p) => p.worktree === directory))
+
+  const projectName = createMemo(() => {
+    const project = currentProject()
+    if (project?.name) return project.name
+    if (!directory) return "Project"
+    return getFilename(directory)
+  })
+
+  const dirSlug = createMemo(() => (directory ? base64Encode(directory) : ""))
+
   const projectSessions = createMemo(() =>
     sessions()
       .filter((s) => s.directory === directory)
@@ -59,12 +246,10 @@ export function Layout(props: ParentProps) {
 
   async function loadSessions() {
     try {
-      console.log("[Layout] Loading sessions for:", directory)
       const res = await client.session.list({ roots: true })
       const data = res.data
       if (Array.isArray(data)) {
         const valid = data.filter((s): s is Session => s && typeof s === "object" && typeof s.id === "string")
-        console.log("[Layout] Loaded sessions:", valid.length, "for current project:", projectSessions().length)
         setSessions(valid)
       } else {
         setSessions([])
@@ -80,18 +265,20 @@ export function Layout(props: ParentProps) {
   onMount(() => {
     loadSessions()
 
-    // Subscribe to session events
     const unsub = events.subscribe((event) => {
       if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
         loadSessions()
       }
     })
 
-    // Keyboard shortcut: Ctrl+` to toggle terminal
     function handleKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey && e.key === "`") {
         e.preventDefault()
         terminal.toggle()
+      }
+      if (e.ctrlKey && e.key === "b") {
+        e.preventDefault()
+        toggleSidebar()
       }
     }
     window.addEventListener("keydown", handleKeyDown)
@@ -107,7 +294,6 @@ export function Layout(props: ParentProps) {
     try {
       const res = await client.session.create({})
       if (res.data) {
-        // Add new session to list immediately
         setSessions((prev) => [res.data as Session, ...prev])
         navigate(`/${dirSlug()}/session/${res.data.id}`)
       }
@@ -124,62 +310,151 @@ export function Layout(props: ParentProps) {
     return location.pathname.endsWith("/settings")
   }
 
+  function navigateToProject(worktree: string) {
+    navigate(`/${base64Encode(worktree)}/session`)
+  }
+
   return (
     <div class="flex h-screen" style={{ background: "var(--background-stronger)" }}>
-      {/* Sidebar */}
-      <aside
-        class="flex flex-col transition-all duration-200"
-        classList={{ "w-64": sidebarOpen(), "w-12": !sidebarOpen() }}
-        style={{
-          background: "var(--background-base)",
-          "border-right": "1px solid var(--border-base)",
-        }}
+      {/* Project Dialog */}
+      <ProjectDialog
+        open={projectDialogOpen()}
+        onClose={() => setProjectDialogOpen(false)}
+        onSelect={handleProjectSelect}
+      />
+
+      {/* Left: Project Icons Strip (always visible) */}
+      <div
+        class="w-16 shrink-0 flex flex-col items-center"
+        style={{ background: "var(--background-base)", "border-right": "1px solid var(--border-base)" }}
       >
-        {/* Header: Logo & Project Name */}
-        <div class="flex items-center justify-between p-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
-          <div class="flex items-center gap-2 min-w-0">
-            {/* PK Icon - links to home */}
-            <a href={basePath} class="shrink-0 hover:opacity-80 transition-opacity" title="Change Project">
-              <PkIcon class="w-7 h-7 rounded" />
-            </a>
-            {/* Project name */}
-            <Show when={sidebarOpen()}>
-              <div class="min-w-0">
-                <div class="text-sm font-medium truncate" style={{ color: "var(--text-strong)" }}>
-                  {projectName()}
-                </div>
+        {/* Prokube Logo */}
+        <button
+          onClick={() => setProjectDialogOpen(true)}
+          class="w-full flex items-center justify-center py-3 transition-opacity hover:opacity-80"
+          style={{ "border-bottom": "1px solid var(--border-base)" }}
+          title="Open Project"
+        >
+          <PkIcon class="w-10 h-10 rounded-lg" />
+        </button>
+
+        {/* Project icons */}
+        <div class="flex-1 flex flex-col items-center gap-2 overflow-y-auto w-full px-2 py-3">
+          <For each={projects()}>
+            {(project) => (
+              <div
+                onClick={() => navigateToProject(project.worktree)}
+                class="group relative cursor-pointer"
+                title={project.name || getFilename(project.worktree)}
+              >
+                <ProjectAvatar project={project} size="large" selected={project.worktree === directory} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeProject(project.worktree)
+                    if (project.worktree === directory && projects().length > 1) {
+                      const next = projects().find((p) => p.worktree !== project.worktree)
+                      if (next) navigateToProject(next.worktree)
+                    }
+                  }}
+                  class="absolute -top-1 -right-1 w-4 h-4 rounded-full hidden group-hover:flex items-center justify-center"
+                  style={{ background: "var(--surface-strong)", color: "var(--text-base)" }}
+                >
+                  <CloseIcon class="w-3 h-3" />
+                </button>
               </div>
-            </Show>
-          </div>
+            )}
+          </For>
+
+          {/* Add project button */}
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen())}
-            class="p-1.5 rounded transition-colors shrink-0"
-            style={{ color: "var(--icon-base)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            title={sidebarOpen() ? "Collapse" : "Expand"}
+            onClick={() => setProjectDialogOpen(true)}
+            class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+            style={{ border: "2px dashed var(--border-base)", color: "var(--icon-weak)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-base)")}
+            title="Open Project"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d={sidebarOpen() ? "M11 19l-7-7 7-7m8 14l-7-7 7-7" : "M13 5l7 7-7 7M5 5l7 7-7 7"}
-              />
-            </svg>
+            <PlusIcon class="w-5 h-5" />
           </button>
         </div>
 
-        {/* Session List */}
-        <div class="flex-1 overflow-y-auto">
-          <Show when={loading()}>
-            <div class="flex items-center justify-center py-8">
-              <Spinner class="w-5 h-5" style={{ color: "var(--text-interactive-base)" }} />
-            </div>
-          </Show>
+        {/* Bottom icons */}
+        <div class="flex flex-col items-center gap-2 py-3" style={{ "border-top": "1px solid var(--border-base)" }}>
+          <button
+            onClick={() => terminal.toggle()}
+            class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+            style={{
+              color: terminal.opened() ? "var(--text-interactive-base)" : "var(--icon-base)",
+              background: terminal.opened() ? "var(--surface-inset)" : "transparent",
+            }}
+            title="Terminal (Ctrl+`)"
+          >
+            <TerminalIcon class="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => navigate(`/${dirSlug()}/settings`)}
+            class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+            style={{
+              color: isSettingsActive() ? "var(--text-interactive-base)" : "var(--icon-base)",
+              background: isSettingsActive() ? "var(--surface-inset)" : "transparent",
+            }}
+            title="Settings"
+          >
+            <SettingsIcon class="w-5 h-5" />
+          </button>
+        </div>
+      </div>
 
-          <Show when={!loading() && sidebarOpen()}>
-            <div class="py-2 px-2 space-y-0.5">
+      {/* Sessions Panel (collapsible) */}
+      <div
+        class="shrink-0 flex flex-col transition-all duration-200"
+        style={{
+          width: sidebarExpanded() ? "256px" : "0px",
+          overflow: "hidden",
+          background: "var(--background-stronger)",
+          "border-right": sidebarExpanded() ? "1px solid var(--border-base)" : "none",
+        }}
+      >
+        <div class="w-64 h-full flex flex-col">
+          {/* Project Header with collapse toggle */}
+          <div class="p-3 flex items-start gap-2" style={{ "border-bottom": "1px solid var(--border-base)" }}>
+            <Show when={currentProject()}>{(project) => <ProjectAvatar project={project()} size="small" />}</Show>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium truncate" style={{ color: "var(--text-strong)" }}>
+                {projectName()}
+              </div>
+              <div class="text-xs truncate" style={{ color: "var(--text-weak)" }}>
+                {directory?.replace(/^\/home\/[^/]+/, "~") || ""}
+              </div>
+            </div>
+            <button
+              onClick={toggleSidebar}
+              class="p-1 rounded transition-colors shrink-0"
+              style={{ color: "var(--icon-base)" }}
+              title="Collapse Sidebar (Ctrl+B)"
+            >
+              <ChevronIcon class="w-4 h-4" direction="left" />
+            </button>
+          </div>
+
+          {/* New Session Button */}
+          <div class="p-3">
+            <Button onClick={createNewSession} variant="primary" class="w-full justify-center">
+              <PlusIcon class="w-4 h-4 mr-2" />
+              New Session
+            </Button>
+          </div>
+
+          {/* Sessions List */}
+          <div class="flex-1 overflow-y-auto px-2">
+            <Show when={loading()}>
+              <div class="flex items-center justify-center py-8">
+                <Spinner class="w-5 h-5" style={{ color: "var(--text-interactive-base)" }} />
+              </div>
+            </Show>
+
+            <Show when={!loading()}>
               <Show
                 when={projectSessions().length > 0}
                 fallback={
@@ -189,244 +464,79 @@ export function Layout(props: ParentProps) {
                   </div>
                 }
               >
-                <For each={projectSessions()}>
-                  {(session) => (
-                    <A
-                      href={`/${dirSlug()}/session/${session.id}`}
-                      class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
-                      style={{
-                        color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
-                        background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
-                      }}
-                    >
-                      <svg
-                        class="w-3.5 h-3.5 shrink-0"
-                        style={{ color: "var(--icon-weak)" }}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
+                <div class="space-y-0.5 pb-2">
+                  <For each={projectSessions()}>
+                    {(session) => (
+                      <A
+                        href={`/${dirSlug()}/session/${session.id}`}
+                        class="flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors"
+                        style={{
+                          color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
+                          background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
+                        }}
                       >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                        />
-                      </svg>
-                      <div class="flex-1 min-w-0">
-                        <div class="truncate text-sm">{session.title || "Untitled"}</div>
-                      </div>
-                    </A>
-                  )}
-                </For>
+                        <span class="shrink-0" style={{ color: "var(--icon-weak)" }}>
+                          <ChatIcon class="w-4 h-4" />
+                        </span>
+                        <span class="truncate">{session.title || "Untitled"}</span>
+                      </A>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </Show>
+          </div>
+
+          {/* Provider Status */}
+          <div class="p-3" style={{ "border-top": "1px solid var(--border-base)" }}>
+            <div class="flex items-center gap-2 text-xs" style={{ color: "var(--text-weak)" }}>
+              <Show
+                when={providers.connected.length > 0}
+                fallback={
+                  <>
+                    <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
+                    <span>No providers</span>
+                  </>
+                }
+              >
+                <span class="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                <span>{providers.connected.length} provider(s)</span>
               </Show>
             </div>
-          </Show>
+          </div>
         </div>
+      </div>
 
-        {/* Bottom Nav */}
-        <div style={{ "border-top": "1px solid var(--border-base)" }}>
-          <Show when={sidebarOpen()}>
-            <div class="p-2 space-y-1">
-              {/* New Session Button */}
-              <button
-                onClick={createNewSession}
-                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
-                style={{ color: "var(--text-base)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <svg
-                  class="w-4 h-4"
-                  style={{ color: "var(--icon-base)" }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-                New Session
-              </button>
-
-              {/* Terminal Button */}
-              <button
-                onClick={() => terminal.toggle()}
-                class="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
-                style={{
-                  color: terminal.opened() ? "var(--text-interactive-base)" : "var(--text-base)",
-                  background: terminal.opened() ? "var(--surface-inset)" : "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (!terminal.opened()) e.currentTarget.style.background = "var(--surface-inset)"
-                }}
-                onMouseLeave={(e) => {
-                  if (!terminal.opened()) e.currentTarget.style.background = "transparent"
-                }}
-              >
-                <svg
-                  class="w-4 h-4"
-                  style={{ color: "var(--icon-base)" }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-                Terminal
-                <span class="ml-auto text-xs opacity-50">Ctrl+`</span>
-              </button>
-
-              {/* Settings Link */}
-              <A
-                href={`/${dirSlug()}/settings`}
-                class="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors"
-                style={{
-                  color: isSettingsActive() ? "var(--text-interactive-base)" : "var(--text-base)",
-                  background: isSettingsActive() ? "var(--surface-inset)" : "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSettingsActive()) e.currentTarget.style.background = "var(--surface-inset)"
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSettingsActive()) e.currentTarget.style.background = "transparent"
-                }}
-              >
-                <svg
-                  class="w-4 h-4"
-                  style={{ color: "var(--icon-base)" }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-                Settings
-              </A>
-
-              {/* Provider status indicator */}
-              <div class="px-2.5 py-1.5 text-xs" style={{ color: "var(--text-weak)" }}>
-                <div class="flex items-center gap-2">
-                  <Show
-                    when={providers.connected.length > 0}
-                    fallback={
-                      <>
-                        <span class="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
-                        <span>No providers</span>
-                      </>
-                    }
-                  >
-                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                    <span>{providers.connected.length} provider(s)</span>
-                  </Show>
-                </div>
-              </div>
-            </div>
-          </Show>
-
-          {/* Collapsed state */}
-          <Show when={!sidebarOpen()}>
-            <div class="p-1.5 space-y-1">
-              <button
-                onClick={createNewSession}
-                class="flex items-center justify-center w-full p-1.5 rounded-md transition-colors"
-                style={{ color: "var(--icon-base)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                title="New Session"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-              <button
-                onClick={() => terminal.toggle()}
-                class="flex items-center justify-center w-full p-1.5 rounded-md transition-colors"
-                style={{
-                  color: terminal.opened() ? "var(--text-interactive-base)" : "var(--icon-base)",
-                  background: terminal.opened() ? "var(--surface-inset)" : "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (!terminal.opened()) e.currentTarget.style.background = "var(--surface-inset)"
-                }}
-                onMouseLeave={(e) => {
-                  if (!terminal.opened()) e.currentTarget.style.background = "transparent"
-                }}
-                title="Terminal (Ctrl+`)"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-              </button>
-              <A
-                href={`/${dirSlug()}/settings`}
-                class="flex items-center justify-center p-1.5 rounded-md transition-colors"
-                style={{
-                  color: isSettingsActive() ? "var(--text-interactive-base)" : "var(--icon-base)",
-                  background: isSettingsActive() ? "var(--surface-inset)" : "transparent",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSettingsActive()) e.currentTarget.style.background = "var(--surface-inset)"
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSettingsActive()) e.currentTarget.style.background = "transparent"
-                }}
-                title="Settings"
-              >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </A>
-            </div>
-          </Show>
-        </div>
-      </aside>
+      {/* Expand button when collapsed */}
+      <Show when={!sidebarExpanded()}>
+        <button
+          onClick={toggleSidebar}
+          class="absolute left-16 top-1/2 -translate-y-1/2 z-10 p-1 rounded-r-md transition-colors"
+          style={{
+            background: "var(--background-base)",
+            border: "1px solid var(--border-base)",
+            "border-left": "none",
+            color: "var(--icon-base)",
+          }}
+          title="Expand Sidebar (Ctrl+B)"
+        >
+          <ChevronIcon class="w-4 h-4" direction="right" />
+        </button>
+      </Show>
 
       {/* Main Content + Terminal */}
       <div class="flex-1 flex flex-col overflow-hidden">
-        {/* Main Content */}
         <main class="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--background-stronger)" }}>
           {props.children}
         </main>
 
-        {/* Terminal Panel - always rendered when sessions exist, visibility controlled by CSS */}
+        {/* Terminal Panel */}
         <Show when={terminal.sessions().length > 0}>
           <div
             class="flex flex-col"
@@ -438,13 +548,11 @@ export function Layout(props: ParentProps) {
               transition: "height 0.15s ease-out",
             }}
           >
-            {/* Terminal Header */}
             <div
               class="flex items-center justify-between px-3 py-1.5 shrink-0"
               style={{ "border-bottom": "1px solid var(--border-base)" }}
             >
               <div class="flex items-center gap-2">
-                {/* Terminal tabs */}
                 <For each={terminal.sessions()}>
                   {(session) => (
                     <div
@@ -455,14 +563,7 @@ export function Layout(props: ParentProps) {
                         color: terminal.active() === session.id ? "var(--text-strong)" : "var(--text-weak)",
                       }}
                     >
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          stroke-width="2"
-                          d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
+                      <TerminalIcon class="w-3 h-3" />
                       {session.title}
                       <button
                         onClick={(e) => {
@@ -472,58 +573,35 @@ export function Layout(props: ParentProps) {
                         class="ml-1 p-0.5 rounded hover:bg-white/10"
                         style={{ color: "var(--icon-weak)" }}
                       >
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
+                        <CloseIcon class="w-3 h-3" />
                       </button>
                     </div>
                   )}
                 </For>
-                {/* New terminal button */}
                 <button
                   onClick={() => terminal.create()}
                   class="p-1 rounded transition-colors"
                   style={{ color: "var(--icon-weak)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   title="New Terminal"
                 >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                  </svg>
+                  <PlusIcon class="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Close button */}
               <button
                 onClick={() => terminal.toggle()}
                 class="p-1 rounded transition-colors"
                 style={{ color: "var(--icon-weak)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 title="Close Terminal"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
+                <ChevronIcon class="w-4 h-4" direction="down" />
               </button>
             </div>
 
-            {/* Terminal Content */}
             <div class="flex-1 overflow-hidden">
               <For each={terminal.sessions()}>
                 {(session) => (
-                  <div
-                    class="size-full"
-                    style={{
-                      display: terminal.active() === session.id ? "block" : "none",
-                    }}
-                  >
+                  <div class="size-full" style={{ display: terminal.active() === session.id ? "block" : "none" }}>
                     <Terminal ptyId={session.id} />
                   </div>
                 )}

@@ -396,4 +396,17 @@
   .markdown-content em {
     @apply italic;
   }
+
+  /* ============================================
+     TERMINAL (xterm.js fixes)
+     ============================================ */
+
+  /* Hide xterm.js helper/composition elements that appear as white boxes */
+  .xterm-helper-textarea {
+    opacity: 0 !important;
+  }
+
+  .xterm .composition-view {
+    display: none !important;
+  }
 }
