@@ -7,6 +7,7 @@ import { useEvents } from "../context/events"
 import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { Markdown } from "../components/markdown"
+import { MessageParts } from "../components/tool-part"
 import { MCPDialog } from "../components/mcp-dialog"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
 import { base64Encode } from "../utils/path"
@@ -34,10 +35,11 @@ function extractTextContent(parts: Part[]): string {
     .join("")
 }
 
-// Check if a message has any visible content (text or error)
+// Check if a message has any visible content (text, tool parts, or error)
 function hasVisibleContent(message: DisplayMessage): boolean {
   if (message.error) return true
   if (message.role === "user") return true
+  if (message.parts.some((p) => p.type === "tool")) return true
   return extractTextContent(message.parts).trim().length > 0
 }
 
@@ -915,6 +917,7 @@ export function Session() {
                     <Show when={extractTextContent(message.parts) || !message.error} fallback={null}>
                       <Markdown content={extractTextContent(message.parts) || "..."} class="text-gray-800" />
                     </Show>
+                    <MessageParts parts={message.parts} />
                   </Show>
                 </div>
               </div>
