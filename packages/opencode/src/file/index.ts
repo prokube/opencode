@@ -373,13 +373,44 @@ export namespace File {
     })
   }
 
-  export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
+  async function scanDirectory(dir: string): Promise<{ files: string[]; dirs: string[] }> {
+    const result: { files: string[]; dirs: string[] } = { files: [], dirs: [] }
+    const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor"])
+    const shouldIgnore = (name: string) => name.startsWith(".") || ignoreNested.has(name)
+
+    const top = await fs.promises.readdir(dir, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+
+    for (const entry of top) {
+      if (!entry.isDirectory()) continue
+      if (shouldIgnore(entry.name)) continue
+      result.dirs.push(entry.name + "/")
+
+      const base = path.join(dir, entry.name)
+      const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
+      for (const child of children) {
+        if (!child.isDirectory()) continue
+        if (shouldIgnore(child.name)) continue
+        result.dirs.push(entry.name + "/" + child.name + "/")
+      }
+    }
+
+    result.dirs.sort()
+    return result
+  }
+
+  export async function search(input: {
+    query: string
+    directory?: string
+    limit?: number
+    dirs?: boolean
+    type?: "file" | "directory"
+  }) {
     const query = input.query.trim()
     const limit = input.limit ?? 100
     const kind = input.type ?? (input.dirs === false ? "file" : "all")
-    log.info("search", { query, kind })
+    log.info("search", { query, kind, directory: input.directory })
 
-    const result = await state().then((x) => x.files())
+    const result = input.directory ? await scanDirectory(input.directory) : await state().then((x) => x.files())
 
     const hidden = (item: string) => {
       const normalized = item.replaceAll("\\", "/").replace(/\/+$/, "")
