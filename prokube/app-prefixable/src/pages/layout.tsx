@@ -291,10 +291,9 @@ export function Layout(props: ParentProps) {
   }
 
   function navigateToProject(worktree: string) {
-    // Force a full page reload when switching projects
-    // because the SDK context is tied to the directory
-    const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath
-    window.location.href = `${base}/${base64Encode(worktree)}/session`
+    // Use router navigation - DirectoryLayout uses keyed For
+    // to force full remount when directory changes
+    navigate(`/${base64Encode(worktree)}/session`)
   }
 
   function navigateToHome() {
@@ -546,16 +545,47 @@ export function Layout(props: ParentProps) {
         {/* Terminal Panel */}
         <Show when={terminal.sessions().length > 0 || terminal.error() || terminal.creating()}>
           <div
-            class="flex flex-col"
+            class="flex flex-col relative"
             style={{
               height: terminal.opened() || terminal.error() || terminal.creating() ? `${terminal.height()}px` : "0px",
               overflow: "hidden",
               "border-top":
                 terminal.opened() || terminal.error() || terminal.creating() ? "1px solid var(--border-base)" : "none",
               background: "var(--background-base)",
-              transition: "height 0.15s ease-out",
+              transition: terminal.opened() ? "none" : "height 0.15s ease-out",
             }}
           >
+            {/* Resize handle */}
+            <Show when={terminal.opened()}>
+              <div
+                class="absolute top-0 left-0 right-0 h-1 cursor-ns-resize z-10 group"
+                style={{ background: "transparent" }}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  const startY = e.clientY
+                  const startHeight = terminal.height()
+
+                  function onMouseMove(e: MouseEvent) {
+                    const delta = startY - e.clientY
+                    const newHeight = Math.max(100, Math.min(600, startHeight + delta))
+                    terminal.setHeight(newHeight)
+                  }
+
+                  function onMouseUp() {
+                    document.removeEventListener("mousemove", onMouseMove)
+                    document.removeEventListener("mouseup", onMouseUp)
+                  }
+
+                  document.addEventListener("mousemove", onMouseMove)
+                  document.addEventListener("mouseup", onMouseUp)
+                }}
+              >
+                <div
+                  class="mx-auto mt-0.5 w-12 h-1 rounded-full transition-colors group-hover:bg-gray-400"
+                  style={{ background: "var(--border-base)" }}
+                />
+              </div>
+            </Show>
             {/* Error display */}
             <Show when={terminal.error()}>
               <div

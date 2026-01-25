@@ -81,7 +81,7 @@ export function Session() {
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   let messagesEndRef: HTMLDivElement | undefined
-  let inputRef: HTMLInputElement | undefined
+  let inputRef: HTMLTextAreaElement | undefined
   let agentPickerRef: HTMLDivElement | undefined
   let modelPickerRef: HTMLDivElement | undefined
   let slashPopoverRef: HTMLDivElement | undefined
@@ -1019,28 +1019,48 @@ export function Session() {
               </div>
             </Show>
 
-            <form onSubmit={sendMessage} class="flex gap-3">
+            <form onSubmit={sendMessage} class="flex gap-3 items-end">
               <div class="flex-1 relative">
-                <input
+                <textarea
                   ref={inputRef}
-                  type="text"
                   value={input()}
-                  onInput={(e) => handleInputChange(e.currentTarget.value)}
-                  onKeyDown={handleInputKeyDown}
+                  onInput={(e) => {
+                    handleInputChange(e.currentTarget.value)
+                    // Auto-grow: reset height then set to scrollHeight
+                    e.currentTarget.style.height = "auto"
+                    e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 200) + "px"
+                  }}
+                  onKeyDown={(e) => {
+                    // Handle slash command navigation first
+                    if (showSlashPopover()) {
+                      handleInputKeyDown(e)
+                      return
+                    }
+                    // Enter to submit (without shift), Shift+Enter for newline
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      const form = e.currentTarget.closest("form")
+                      if (form) form.requestSubmit()
+                    }
+                  }}
                   placeholder="Type a message or / for commands..."
-                  class="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none"
+                  rows={1}
+                  class="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none resize-none"
                   style={
                     {
                       background: "var(--background-base)",
                       border: "1px solid var(--border-base)",
                       color: "var(--text-base)",
                       "--tw-ring-color": "var(--interactive-base)",
+                      "min-height": "48px",
+                      "max-height": "200px",
+                      "overflow-y": "auto",
                     } as any
                   }
                 />
                 {/* Hint for slash commands */}
                 <Show when={!input() && !loading() && !processing()}>
-                  <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--text-weak)" }}>
+                  <div class="absolute right-3 top-3 text-xs" style={{ color: "var(--text-weak)" }}>
                     Type{" "}
                     <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
                       /

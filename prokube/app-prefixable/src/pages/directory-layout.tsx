@@ -1,4 +1,4 @@
-import { type ParentProps, createMemo, Show } from "solid-js"
+import { type ParentProps, createMemo, For } from "solid-js"
 import { useParams, Navigate } from "@solidjs/router"
 import { SDKProvider } from "../context/sdk"
 import { EventProvider } from "../context/events"
@@ -11,6 +11,7 @@ import { Layout } from "./layout"
 /**
  * Wraps routes that need a directory context.
  * Extracts the base64-encoded directory from the URL and provides SDK context.
+ * Uses a keyed For to force full remount when directory changes.
  */
 export function DirectoryLayout(props: ParentProps) {
   const params = useParams<{ dir: string }>()
@@ -30,10 +31,17 @@ export function DirectoryLayout(props: ParentProps) {
     }
   })
 
+  // Use For with a single-element array keyed by directory to force remount
+  // This ensures all providers are recreated when switching projects
+  const directories = createMemo(() => {
+    const dir = directory()
+    return dir ? [dir] : []
+  })
+
   return (
-    <Show when={directory()} fallback={<Navigate href="/" />}>
+    <For each={directories()} fallback={<Navigate href="/" />}>
       {(dir) => (
-        <SDKProvider directory={dir()}>
+        <SDKProvider directory={dir}>
           <EventProvider>
             <ProviderProvider>
               <MCPProvider>
@@ -45,6 +53,6 @@ export function DirectoryLayout(props: ParentProps) {
           </EventProvider>
         </SDKProvider>
       )}
-    </Show>
+    </For>
   )
 }
