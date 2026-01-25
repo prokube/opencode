@@ -22,6 +22,7 @@ import {
   ChevronRight,
   ChevronDown,
   Folder,
+  AlertTriangle,
 } from "lucide-solid"
 
 // Storage keys
@@ -543,76 +544,115 @@ export function Layout(props: ParentProps) {
         </main>
 
         {/* Terminal Panel */}
-        <Show when={terminal.sessions().length > 0}>
+        <Show when={terminal.sessions().length > 0 || terminal.error() || terminal.creating()}>
           <div
             class="flex flex-col"
             style={{
-              height: terminal.opened() ? `${terminal.height()}px` : "0px",
+              height: terminal.opened() || terminal.error() || terminal.creating() ? `${terminal.height()}px` : "0px",
               overflow: "hidden",
-              "border-top": terminal.opened() ? "1px solid var(--border-base)" : "none",
+              "border-top":
+                terminal.opened() || terminal.error() || terminal.creating() ? "1px solid var(--border-base)" : "none",
               background: "var(--background-base)",
               transition: "height 0.15s ease-out",
             }}
           >
-            <div
-              class="flex items-center justify-between px-3 py-1.5 shrink-0"
-              style={{ "border-bottom": "1px solid var(--border-base)" }}
-            >
-              <div class="flex items-center gap-2">
-                <For each={terminal.sessions()}>
-                  {(session) => (
-                    <div
-                      onClick={() => terminal.setActive(session.id)}
-                      class="flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors cursor-pointer"
-                      style={{
-                        background: terminal.active() === session.id ? "var(--surface-inset)" : "transparent",
-                        color: terminal.active() === session.id ? "var(--text-strong)" : "var(--text-weak)",
-                      }}
-                    >
-                      <SquareTerminal class="w-3 h-3" />
-                      {session.title}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          terminal.close(session.id)
-                        }}
-                        class="ml-1 p-0.5 rounded hover:bg-white/10"
-                        style={{ color: "var(--icon-weak)" }}
-                      >
-                        <X class="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
-                </For>
+            {/* Error display */}
+            <Show when={terminal.error()}>
+              <div
+                class="p-4 flex items-start gap-3"
+                style={{ background: "var(--surface-critical-subtle)", color: "var(--text-critical-base)" }}
+              >
+                <AlertTriangle class="w-5 h-5 shrink-0 mt-0.5" />
+                <div class="flex-1">
+                  <div class="font-medium text-sm">Terminal Error</div>
+                  <div class="text-sm mt-1" style={{ color: "var(--text-base)" }}>
+                    {terminal.error()}
+                  </div>
+                  <div class="text-xs mt-2" style={{ color: "var(--text-weak)" }}>
+                    This may happen if the PTY system is not available in this environment. Check the server logs for
+                    more details.
+                  </div>
+                </div>
                 <button
-                  onClick={() => terminal.create(directory)}
+                  onClick={() => terminal.clearError()}
+                  class="p-1 rounded hover:bg-white/10"
+                  style={{ color: "var(--icon-base)" }}
+                >
+                  <X class="w-4 h-4" />
+                </button>
+              </div>
+            </Show>
+
+            {/* Creating indicator */}
+            <Show when={terminal.creating() && !terminal.error()}>
+              <div class="p-4 flex items-center gap-3" style={{ color: "var(--text-weak)" }}>
+                <Spinner class="w-5 h-5" />
+                <span class="text-sm">Creating terminal session...</span>
+              </div>
+            </Show>
+
+            {/* Terminal tabs and content */}
+            <Show when={terminal.sessions().length > 0 && !terminal.error()}>
+              <div
+                class="flex items-center justify-between px-3 py-1.5 shrink-0"
+                style={{ "border-bottom": "1px solid var(--border-base)" }}
+              >
+                <div class="flex items-center gap-2">
+                  <For each={terminal.sessions()}>
+                    {(session) => (
+                      <div
+                        onClick={() => terminal.setActive(session.id)}
+                        class="flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors cursor-pointer"
+                        style={{
+                          background: terminal.active() === session.id ? "var(--surface-inset)" : "transparent",
+                          color: terminal.active() === session.id ? "var(--text-strong)" : "var(--text-weak)",
+                        }}
+                      >
+                        <SquareTerminal class="w-3 h-3" />
+                        {session.title}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            terminal.close(session.id)
+                          }}
+                          class="ml-1 p-0.5 rounded hover:bg-white/10"
+                          style={{ color: "var(--icon-weak)" }}
+                        >
+                          <X class="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                  <button
+                    onClick={() => terminal.create(directory)}
+                    class="p-1 rounded transition-colors"
+                    style={{ color: "var(--icon-weak)" }}
+                    title="New Terminal"
+                  >
+                    <Plus class="w-4 h-4" />
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => terminal.toggle(directory)}
                   class="p-1 rounded transition-colors"
                   style={{ color: "var(--icon-weak)" }}
-                  title="New Terminal"
+                  title="Close Terminal"
                 >
-                  <Plus class="w-4 h-4" />
+                  <ChevronDown class="w-4 h-4" />
                 </button>
               </div>
 
-              <button
-                onClick={() => terminal.toggle(directory)}
-                class="p-1 rounded transition-colors"
-                style={{ color: "var(--icon-weak)" }}
-                title="Close Terminal"
-              >
-                <ChevronDown class="w-4 h-4" />
-              </button>
-            </div>
-
-            <div class="flex-1 overflow-hidden">
-              <For each={terminal.sessions()}>
-                {(session) => (
-                  <div class="size-full" style={{ display: terminal.active() === session.id ? "block" : "none" }}>
-                    <Terminal ptyId={session.id} />
-                  </div>
-                )}
-              </For>
-            </div>
+              <div class="flex-1 overflow-hidden">
+                <For each={terminal.sessions()}>
+                  {(session) => (
+                    <div class="size-full" style={{ display: terminal.active() === session.id ? "block" : "none" }}>
+                      <Terminal ptyId={session.id} />
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
           </div>
         </Show>
       </div>

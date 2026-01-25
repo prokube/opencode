@@ -11,12 +11,15 @@ interface TerminalContextValue {
   active: () => string | null
   opened: () => boolean
   height: () => number
+  error: () => string | null
+  creating: () => boolean
   create: (cwd?: string) => Promise<string | null>
   close: (id: string) => Promise<void>
   setActive: (id: string | null) => void
   toggle: (cwd?: string) => void
   open: (cwd?: string) => void
   setHeight: (h: number) => void
+  clearError: () => void
 }
 
 const TerminalContext = createContext<TerminalContextValue>()
@@ -27,10 +30,16 @@ export function TerminalProvider(props: ParentProps) {
   const [active, setActive] = createSignal<string | null>(null)
   const [opened, setOpened] = createSignal(false)
   const [height, setHeight] = createSignal(280)
+  const [error, setError] = createSignal<string | null>(null)
+  const [creating, setCreating] = createSignal(false)
 
   async function create(cwd?: string): Promise<string | null> {
+    setCreating(true)
+    setError(null)
     try {
+      console.log("[Terminal] Creating PTY session, cwd:", cwd)
       const res = await client.pty.create({ cwd })
+      console.log("[Terminal] PTY create response:", res)
       if (res.data) {
         const session: PTYSession = {
           id: res.data.id,
@@ -41,8 +50,13 @@ export function TerminalProvider(props: ParentProps) {
         setOpened(true)
         return session.id
       }
-    } catch (e) {
-      console.error("Failed to create PTY:", e)
+      setError("Failed to create terminal: No data in response")
+    } catch (e: any) {
+      console.error("[Terminal] Failed to create PTY:", e)
+      const msg = e?.message || e?.toString() || "Unknown error"
+      setError(`Failed to create terminal: ${msg}`)
+    } finally {
+      setCreating(false)
     }
     return null
   }
@@ -90,12 +104,15 @@ export function TerminalProvider(props: ParentProps) {
         active,
         opened,
         height,
+        error,
+        creating,
         create,
         close,
         setActive,
         toggle,
         open,
         setHeight,
+        clearError: () => setError(null),
       }}
     >
       {props.children}
