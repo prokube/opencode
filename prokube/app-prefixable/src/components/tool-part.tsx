@@ -1,5 +1,6 @@
 import { createSignal, Show, For } from "solid-js"
 import type { Part, ToolPart as SDKToolPart, ToolState } from "@opencode-ai/sdk/v2/client"
+import { ChevronDown } from "lucide-solid"
 
 // Use the SDK's ToolPart type
 type ToolPart = SDKToolPart
@@ -147,18 +148,13 @@ export function ToolPartDisplay(props: { part: ToolPart }) {
 
         {/* Expand arrow */}
         <Show when={canExpand()}>
-          <svg
+          <ChevronDown
             class="w-4 h-4 shrink-0 transition-transform"
             style={{
               color: "var(--icon-weak)",
               transform: expanded() ? "rotate(180deg)" : "rotate(0deg)",
             }}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
+          />
         </Show>
       </button>
 

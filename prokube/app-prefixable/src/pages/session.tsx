@@ -12,6 +12,7 @@ import { MCPDialog } from "../components/mcp-dialog"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
 import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
+import { Plus, Settings, ChevronDown, MessageCircle } from "lucide-solid"
 
 interface Command {
   id: string
@@ -600,29 +601,14 @@ export function Session() {
               size="large"
             >
               <div class="flex items-center justify-center gap-2 w-full">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus class="w-4 h-4" />
                 <span>New Session</span>
               </div>
             </Button>
 
             <Button onClick={() => navigate(`/${dirSlug()}/settings`)} variant="secondary" class="w-full" size="large">
               <div class="flex items-center justify-center gap-2 w-full">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
+                <Settings class="w-4 h-4" />
                 <span>Settings</span>
               </div>
             </Button>
@@ -678,15 +664,7 @@ export function Session() {
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 <span class="capitalize">{providers.selectedAgent}</span>
-                <svg
-                  class="w-4 h-4"
-                  style={{ color: "var(--icon-weak)" }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
+                <ChevronDown class="w-4 h-4" style={{ color: "var(--icon-weak)" }} />
               </button>
 
               <Show when={showAgentPicker()}>
@@ -755,15 +733,7 @@ export function Session() {
                     ? `${providers.selectedModel.providerID}/${providers.selectedModel.modelID}`
                     : "Select model"}
                 </span>
-                <svg
-                  class="w-4 h-4"
-                  style={{ color: "var(--icon-weak)" }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
+                <ChevronDown class="w-4 h-4" style={{ color: "var(--icon-weak)" }} />
               </button>
 
               <Show when={showModelPicker()}>
@@ -879,20 +849,7 @@ export function Session() {
                 class="w-16 h-16 rounded-full flex items-center justify-center mb-4"
                 style={{ background: "var(--surface-inset)" }}
               >
-                <svg
-                  class="w-8 h-8"
-                  style={{ color: "var(--text-interactive-base)" }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                  />
-                </svg>
+                <MessageCircle class="w-8 h-8" style={{ color: "var(--text-interactive-base)" }} />
               </div>
               <p class="text-lg mb-2" style={{ color: "var(--text-weak)" }}>
                 Ready to chat

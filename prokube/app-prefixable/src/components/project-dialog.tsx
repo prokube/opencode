@@ -3,32 +3,12 @@ import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "../context/base-path"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Button } from "@opencode-ai/ui/button"
+import { Folder, X } from "lucide-solid"
 
 interface ProjectDialogProps {
   open: boolean
   onClose: () => void
   onSelect: (worktree: string) => void
-}
-
-function FolderIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-      />
-    </svg>
-  )
-}
-
-function CloseIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  )
 }
 
 export function ProjectDialog(props: ProjectDialogProps) {
@@ -139,7 +119,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
               class="p-1 rounded-md transition-colors"
               style={{ color: "var(--icon-base)" }}
             >
-              <CloseIcon class="w-5 h-5" />
+              <X class="w-5 h-5" />
             </button>
           </div>
 
@@ -183,7 +163,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
                         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                       >
-                        <FolderIcon class="w-4 h-4 shrink-0" />
+                        <Folder class="w-4 h-4 shrink-0" />
                         <span class="truncate">{path}</span>
                       </button>
                     )}
@@ -257,7 +237,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
                   onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
-                  <FolderIcon class="w-4 h-4 shrink-0" />
+                  <Folder class="w-4 h-4 shrink-0" />
                   <span>Open home directory ({homeDirectory()})</span>
                 </button>
               </div>

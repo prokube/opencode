@@ -1,12 +1,15 @@
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, Show, type JSX } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
+import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
+import { Check, Copy, Plug, GitBranch, Server, Cpu, Bot } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
   const mcp = useMCP()
+  const { client, url, directory } = useSDK()
   const [selectedProvider, setSelectedProvider] = createSignal<string | null>(null)
   const [apiKey, setApiKey] = createSignal("")
   const [connecting, setConnecting] = createSignal(false)
@@ -15,6 +18,152 @@ export function Settings() {
   const [activeTab, setActiveTab] = createSignal("providers")
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
+
+  // Git SSH Key state
+  const [sshKeys, setSshKeys] = createSignal<Array<{ name: string; content: string }>>([])
+  const [selectedKeyName, setSelectedKeyName] = createSignal<string | null>(null)
+  const [sshKeyLoading, setSshKeyLoading] = createSignal(false)
+  const [sshKeyGenerating, setSshKeyGenerating] = createSignal(false)
+  const [sshKeyError, setSshKeyError] = createSignal<string | null>(null)
+  const [sshKeyCopied, setSshKeyCopied] = createSignal(false)
+  const [sshKeyLoaded, setSshKeyLoaded] = createSignal(false)
+
+  // Get currently selected key content
+  const selectedKey = () => {
+    const name = selectedKeyName()
+    if (!name) return null
+    return sshKeys().find((k) => k.name === name)?.content ?? null
+  }
+
+  // Load SSH key when Git tab is first accessed
+  function onTabChange(tabId: string) {
+    setActiveTab(tabId)
+    if (tabId === "git" && !sshKeyLoaded()) {
+      setSshKeyLoaded(true)
+      loadSshKeys()
+    }
+  }
+
+  async function runPtyCommand(command: string, timeout = 3000): Promise<string> {
+    const ptyRes = await client.pty.create({
+      command: "/bin/sh",
+      args: ["-c", command + "; exit"],
+    })
+
+    if (!ptyRes.data?.id) return ""
+
+    const ptyId = ptyRes.data.id
+    const wsUrl = url.replace(/^http/, "ws") + `/pty/${ptyId}/connect?directory=${encodeURIComponent(directory || "")}`
+
+    const output = await new Promise<string>((resolve) => {
+      let data = ""
+      const ws = new WebSocket(wsUrl)
+      const timeoutId = setTimeout(() => {
+        ws.close()
+        resolve(data)
+      }, timeout)
+
+      ws.addEventListener("message", (event) => {
+        data += event.data
+      })
+
+      ws.addEventListener("close", () => {
+        clearTimeout(timeoutId)
+        resolve(data)
+      })
+
+      ws.addEventListener("error", () => {
+        clearTimeout(timeoutId)
+        resolve(data)
+      })
+    })
+
+    await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+    return output
+  }
+
+  async function loadSshKeys() {
+    setSshKeyLoading(true)
+    setSshKeyError(null)
+    try {
+      // List all .pub files in ~/.ssh/
+      const listOutput = await runPtyCommand("ls -1 ~/.ssh/*.pub 2>/dev/null")
+
+      // Parse file names
+      const files = listOutput
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.endsWith(".pub") && !line.includes("*"))
+
+      if (files.length === 0) {
+        setSshKeys([])
+        setSelectedKeyName(null)
+        return
+      }
+
+      // Read each key file
+      const keys: Array<{ name: string; content: string }> = []
+      for (const file of files) {
+        const content = await runPtyCommand(`cat "${file}" 2>/dev/null`)
+        const keyContent = content
+          .split("\n")
+          .find((line) => {
+            const trimmed = line.trim()
+            return trimmed.startsWith("ssh-") || trimmed.startsWith("ecdsa-")
+          })
+          ?.trim()
+
+        if (keyContent) {
+          // Extract just the filename without path
+          const name = file.split("/").pop()?.replace(".pub", "") || file
+          keys.push({ name, content: keyContent })
+        }
+      }
+
+      setSshKeys(keys)
+
+      // Select first key by default, or keep current selection if still valid
+      const current = selectedKeyName()
+      if (!current || !keys.find((k) => k.name === current)) {
+        setSelectedKeyName(keys[0]?.name ?? null)
+      }
+    } catch (e) {
+      console.error("Failed to load SSH keys:", e)
+      setSshKeyError("Failed to check for SSH keys")
+    } finally {
+      setSshKeyLoading(false)
+    }
+  }
+
+  async function generateSshKey() {
+    setSshKeyGenerating(true)
+    setSshKeyError(null)
+    try {
+      // Generate new ed25519 key
+      await runPtyCommand('mkdir -p ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q 2>/dev/null', 10000)
+
+      // Reload all keys and select the new one
+      await loadSshKeys()
+      setSelectedKeyName("id_ed25519")
+    } catch (e) {
+      console.error("Failed to generate SSH key:", e)
+      setSshKeyError("Failed to generate SSH key")
+    } finally {
+      setSshKeyGenerating(false)
+    }
+  }
+
+  async function copySshKey() {
+    const key = selectedKey()
+    if (!key) return
+    try {
+      await navigator.clipboard.writeText(key)
+      setSshKeyCopied(true)
+      setTimeout(() => setSshKeyCopied(false), 2000)
+    } catch (e) {
+      console.error("Failed to copy:", e)
+    }
+  }
 
   async function handleConnect(e: SubmitEvent) {
     e.preventDefault()
@@ -45,11 +194,12 @@ export function Settings() {
     return provider?.name ?? id
   }
 
-  const tabs = [
-    { id: "providers", label: "Providers" },
-    { id: "mcp", label: "MCP Servers" },
-    { id: "models", label: "Models" },
-    { id: "agents", label: "Agents" },
+  const tabs: Array<{ id: string; label: string; icon: () => JSX.Element }> = [
+    { id: "providers", label: "Providers", icon: () => <Plug class="w-4 h-4" /> },
+    { id: "git", label: "Git", icon: () => <GitBranch class="w-4 h-4" /> },
+    { id: "mcp", label: "MCP Servers", icon: () => <Server class="w-4 h-4" /> },
+    { id: "models", label: "Models", icon: () => <Cpu class="w-4 h-4" /> },
+    { id: "agents", label: "Agents", icon: () => <Bot class="w-4 h-4" /> },
   ]
 
   return (
@@ -69,7 +219,7 @@ export function Settings() {
           <For each={tabs}>
             {(tab) => (
               <button
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => onTabChange(tab.id)}
                 class="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors text-left"
                 style={{
                   color: activeTab() === tab.id ? "var(--text-interactive-base)" : "var(--text-base)",
@@ -82,6 +232,7 @@ export function Settings() {
                   if (activeTab() !== tab.id) e.currentTarget.style.background = "transparent"
                 }}
               >
+                {tab.icon()}
                 {tab.label}
               </button>
             )}
@@ -141,19 +292,7 @@ export function Settings() {
                           >
                             <div class="flex items-center gap-3">
                               <div class="w-6 h-6 bg-green-100 rounded flex items-center justify-center">
-                                <svg
-                                  class="w-3 h-3 text-green-600"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
+                                <Check class="w-3 h-3 text-green-600" />
                               </div>
                               <span class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
                                 {getProviderDisplayName(providerID)}
@@ -274,6 +413,210 @@ export function Settings() {
                       </button>
                     </Show>
                   </form>
+                </div>
+              </section>
+            </div>
+          </Show>
+
+          {/* Git Tab */}
+          <Show when={activeTab() === "git"}>
+            <div class="space-y-6">
+              <header>
+                <h1 class="text-lg font-medium" style={{ color: "var(--text-strong)" }}>
+                  Git Authentication
+                </h1>
+                <p class="text-sm mt-1" style={{ color: "var(--text-weak)" }}>
+                  Configure SSH keys to push and pull from remote repositories
+                </p>
+              </header>
+
+              {/* SSH Key Section */}
+              <section
+                class="rounded-lg overflow-hidden"
+                style={{
+                  background: "var(--background-base)",
+                  border: "1px solid var(--border-base)",
+                }}
+              >
+                <div class="px-4 py-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
+                  <h2 class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
+                    SSH Key
+                  </h2>
+                </div>
+                <div class="p-4">
+                  <Show when={sshKeyLoading()}>
+                    <div class="flex items-center gap-2" style={{ color: "var(--text-weak)" }}>
+                      <Spinner class="w-4 h-4" />
+                      <span class="text-sm">Checking for SSH keys...</span>
+                    </div>
+                  </Show>
+
+                  <Show when={sshKeyError()}>
+                    <div class="p-3 bg-red-50 border border-red-200 text-red-800 rounded-md text-sm mb-4">
+                      {sshKeyError()}
+                    </div>
+                  </Show>
+
+                  <Show when={!sshKeyLoading() && sshKeys().length === 0}>
+                    <div class="text-center py-4">
+                      <p class="text-sm mb-4" style={{ color: "var(--text-weak)" }}>
+                        No SSH keys found. Generate one to authenticate with Git providers.
+                      </p>
+                      <button
+                        onClick={generateSshKey}
+                        disabled={sshKeyGenerating()}
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                        style={{
+                          background: "var(--interactive-base)",
+                          color: "white",
+                        }}
+                      >
+                        <Show when={sshKeyGenerating()} fallback="Generate SSH Key">
+                          <Spinner class="w-4 h-4" />
+                          Generating...
+                        </Show>
+                      </button>
+                    </div>
+                  </Show>
+
+                  <Show when={!sshKeyLoading() && sshKeys().length > 0}>
+                    <div class="space-y-4">
+                      {/* Key Selection Dropdown */}
+                      <div>
+                        <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
+                          Select Key
+                        </label>
+                        <select
+                          value={selectedKeyName() || ""}
+                          onChange={(e) => setSelectedKeyName(e.currentTarget.value)}
+                          class="w-full px-3 py-2 rounded-md text-sm"
+                          style={{
+                            background: "var(--background-base)",
+                            border: "1px solid var(--border-base)",
+                            color: "var(--text-base)",
+                          }}
+                        >
+                          <For each={sshKeys()}>{(key) => <option value={key.name}>{key.name}</option>}</For>
+                        </select>
+                      </div>
+
+                      {/* Selected Key Display */}
+                      <Show when={selectedKey()}>
+                        <div>
+                          <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
+                            Public Key
+                          </label>
+                          <div class="relative">
+                            <pre
+                              class="p-3 rounded-md text-xs overflow-x-auto"
+                              style={{
+                                background: "var(--surface-inset)",
+                                color: "var(--text-base)",
+                                "word-break": "break-all",
+                                "white-space": "pre-wrap",
+                              }}
+                            >
+                              {selectedKey()}
+                            </pre>
+                            <button
+                              onClick={copySshKey}
+                              class="absolute top-2 right-2 p-1.5 rounded transition-colors"
+                              style={{
+                                background: "var(--background-base)",
+                                border: "1px solid var(--border-base)",
+                                color: sshKeyCopied() ? "var(--icon-success-base)" : "var(--icon-base)",
+                              }}
+                              title="Copy to clipboard"
+                            >
+                              <Show when={sshKeyCopied()} fallback={<Copy class="w-4 h-4" />}>
+                                <Check class="w-4 h-4" />
+                              </Show>
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
+
+                      <div class="flex gap-2">
+                        <button
+                          onClick={loadSshKeys}
+                          class="px-3 py-1.5 rounded text-sm transition-colors"
+                          style={{
+                            background: "var(--surface-inset)",
+                            color: "var(--text-base)",
+                          }}
+                        >
+                          Refresh
+                        </button>
+                        <button
+                          onClick={generateSshKey}
+                          disabled={sshKeyGenerating()}
+                          class="px-3 py-1.5 rounded text-sm transition-colors disabled:opacity-50"
+                          style={{
+                            background: "var(--surface-inset)",
+                            color: "var(--text-base)",
+                          }}
+                        >
+                          <Show when={sshKeyGenerating()} fallback="Generate New Key">
+                            <Spinner class="w-3 h-3" />
+                          </Show>
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
+                </div>
+              </section>
+
+              {/* Instructions Section */}
+              <section
+                class="rounded-lg p-4"
+                style={{
+                  background: "var(--surface-inset)",
+                  border: "1px solid var(--border-base)",
+                }}
+              >
+                <h3 class="text-sm font-medium mb-3" style={{ color: "var(--text-strong)" }}>
+                  Add your key to a Git provider
+                </h3>
+                <div class="space-y-2 text-sm" style={{ color: "var(--text-weak)" }}>
+                  <p>Copy your public key above and add it to your Git provider:</p>
+                  <ul class="list-disc list-inside space-y-1 ml-2">
+                    <li>
+                      <a
+                        href="https://github.com/settings/ssh/new"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="hover:underline"
+                        style={{ color: "var(--text-interactive-base)" }}
+                      >
+                        GitHub
+                      </a>
+                      {" → Settings → SSH and GPG keys → New SSH key"}
+                    </li>
+                    <li>
+                      <a
+                        href="https://gitlab.com/-/user_settings/ssh_keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="hover:underline"
+                        style={{ color: "var(--text-interactive-base)" }}
+                      >
+                        GitLab
+                      </a>
+                      {" → Preferences → SSH Keys"}
+                    </li>
+                    <li>
+                      <a
+                        href="https://bitbucket.org/account/settings/ssh-keys/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="hover:underline"
+                        style={{ color: "var(--text-interactive-base)" }}
+                      >
+                        Bitbucket
+                      </a>
+                      {" → Personal settings → SSH keys"}
+                    </li>
+                  </ul>
                 </div>
               </section>
             </div>
@@ -537,20 +880,7 @@ export function Settings() {
                             >
                               <span>{model.name}</span>
                               <Show when={isSelected}>
-                                <svg
-                                  class="w-4 h-4"
-                                  style={{ color: "var(--text-interactive-base)" }}
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    stroke-width="2"
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
+                                <Check class="w-4 h-4" style={{ color: "var(--text-interactive-base)" }} />
                               </Show>
                             </button>
                           )
@@ -613,9 +943,7 @@ export function Settings() {
                       >
                         <span class="text-sm font-medium capitalize">{agent.name}</span>
                         <Show when={providers.selectedAgent === agent.name}>
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                          </svg>
+                          <Check class="w-4 h-4" />
                         </Show>
                       </button>
                     )}

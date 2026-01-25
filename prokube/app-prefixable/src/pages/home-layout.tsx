@@ -2,6 +2,7 @@ import { type ParentProps, createSignal, For, onMount } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "../utils/path"
 import { ProjectDialog } from "../components/project-dialog"
+import { Plus, X, Settings, Folder } from "lucide-solid"
 
 // Storage key
 const PROJECTS_STORAGE_KEY = "opencode.projects"
@@ -16,12 +17,16 @@ function getFilename(path: string): string {
 }
 
 function getInitials(name: string): string {
-  return name
+  // Only use ASCII letters for initials
+  const clean = name.replace(/[^a-zA-Z0-9\s_-]/g, "")
+  if (!clean) return ""
+  const parts = clean
     .split(/[-_\s]/)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() || "")
     .join("")
+  return parts
 }
 
 // OpenCode Logo
@@ -38,6 +43,7 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
   const name = () => props.project.name || getFilename(props.project.worktree)
   const initials = () => getInitials(name())
   const size = () => (props.size === "large" ? "w-10 h-10" : "w-8 h-8")
+  const iconSize = () => (props.size === "large" ? "w-5 h-5" : "w-4 h-4")
 
   return (
     <div
@@ -52,24 +58,8 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
           : "2px solid color-mix(in srgb, var(--interactive-base) 40%, transparent)",
       }}
     >
-      {initials()}
+      {initials() || <Folder class={iconSize()} />}
     </div>
-  )
-}
-
-function PlusIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-    </svg>
-  )
-}
-
-function CloseIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-    </svg>
   )
 }
 
@@ -165,7 +155,7 @@ export function HomeLayout(props: ParentProps) {
                   class="absolute -top-1 -right-1 w-4 h-4 rounded-full hidden group-hover:flex items-center justify-center"
                   style={{ background: "var(--surface-strong)", color: "var(--text-base)" }}
                 >
-                  <CloseIcon class="w-3 h-3" />
+                  <X class="w-3 h-3" />
                 </button>
               </div>
             )}
@@ -180,7 +170,21 @@ export function HomeLayout(props: ParentProps) {
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-base)")}
             title="Open Project"
           >
-            <PlusIcon class="w-5 h-5" />
+            <Plus class="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Bottom: Settings */}
+        <div class="flex flex-col items-center gap-2 py-3" style={{ "border-top": "1px solid var(--border-base)" }}>
+          <button
+            onClick={() => navigate("/settings")}
+            class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+            style={{ color: "var(--icon-base)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            title="Settings"
+          >
+            <Settings class="w-5 h-5" />
           </button>
         </div>
       </div>

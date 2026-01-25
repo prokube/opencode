@@ -1,4 +1,4 @@
-import { type ParentProps, createSignal, For, Show, onMount, createMemo, onCleanup } from "solid-js"
+import { type ParentProps, createSignal, For, Show, onMount, createMemo, onCleanup, createEffect } from "solid-js"
 import { A, useLocation, useNavigate, useParams } from "@solidjs/router"
 import { useBasePath } from "../context/base-path"
 import { useSDK } from "../context/sdk"
@@ -11,6 +11,18 @@ import { Button } from "@opencode-ai/ui/button"
 import { Terminal } from "../components/terminal"
 import { ProjectDialog } from "../components/project-dialog"
 import type { Session } from "@opencode-ai/sdk/v2/client"
+import {
+  Plus,
+  Settings,
+  SquareTerminal,
+  MessageCircle,
+  Archive,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Folder,
+} from "lucide-solid"
 
 // Storage keys
 const PROJECTS_STORAGE_KEY = "opencode.projects"
@@ -26,12 +38,16 @@ function getFilename(path: string): string {
 }
 
 function getInitials(name: string): string {
-  return name
+  // Only use ASCII letters for initials
+  const clean = name.replace(/[^a-zA-Z0-9\s_-]/g, "")
+  if (!clean) return ""
+  const parts = clean
     .split(/[-_\s]/)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() || "")
     .join("")
+  return parts
 }
 
 // OpenCode Logo
@@ -48,8 +64,8 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
   const name = () => props.project.name || getFilename(props.project.worktree)
   const initials = () => getInitials(name())
   const size = () => (props.size === "large" ? "w-10 h-10" : "w-8 h-8")
+  const iconSize = () => (props.size === "large" ? "w-5 h-5" : "w-4 h-4")
 
-  // Same background always, purple border when selected (like chat input focus state)
   return (
     <div
       class={`${size()} rounded-lg flex items-center justify-center font-medium text-sm shrink-0 transition-all`}
@@ -59,91 +75,8 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
         border: props.selected ? "2px solid var(--interactive-base)" : "2px solid transparent",
       }}
     >
-      {initials()}
+      {initials() || <Folder class={iconSize()} />}
     </div>
-  )
-}
-
-// Icons
-function PlusIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-    </svg>
-  )
-}
-
-function SettingsIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-      />
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  )
-}
-
-function TerminalIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-      />
-    </svg>
-  )
-}
-
-function ChatIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      />
-    </svg>
-  )
-}
-
-function ArchiveIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-      />
-    </svg>
-  )
-}
-
-function CloseIcon(props: { class?: string }) {
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  )
-}
-
-function ChevronIcon(props: { class?: string; direction: "left" | "right" | "down" }) {
-  const path = () => {
-    if (props.direction === "left") return "M15 19l-7-7 7-7"
-    if (props.direction === "right") return "M9 5l7 7-7 7"
-    return "M19 9l-7 7-7-7"
-  }
-  return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={path()} />
-    </svg>
   )
 }
 
@@ -161,6 +94,17 @@ export function Layout(props: ParentProps) {
   const [projects, setProjects] = createSignal<Project[]>([])
   const [sidebarExpanded, setSidebarExpanded] = createSignal(true)
   const [projectDialogOpen, setProjectDialogOpen] = createSignal(false)
+  const [windowWidth, setWindowWidth] = createSignal(typeof window !== "undefined" ? window.innerWidth : 1200)
+
+  // Responsive breakpoint - collapse sidebar below 900px
+  const COLLAPSE_BREAKPOINT = 900
+
+  // Effective sidebar state: hidden on settings page or small screens
+  const showSidebar = createMemo(() => {
+    if (location.pathname.endsWith("/settings")) return false
+    if (windowWidth() < COLLAPSE_BREAKPOINT) return false
+    return sidebarExpanded()
+  })
 
   // Load state from storage
   onMount(() => {
@@ -194,6 +138,13 @@ export function Layout(props: ParentProps) {
       setSidebarExpanded(true)
       localStorage.setItem(SIDEBAR_EXPANDED_KEY, "true")
     }
+
+    // Resize listener for responsive sidebar
+    function handleResize() {
+      setWindowWidth(window.innerWidth)
+    }
+    window.addEventListener("resize", handleResize)
+    onCleanup(() => window.removeEventListener("resize", handleResize))
   })
 
   function saveProjects(list: Project[]) {
@@ -395,7 +346,7 @@ export function Layout(props: ParentProps) {
                   class="absolute -top-1 -right-1 w-4 h-4 rounded-full hidden group-hover:flex items-center justify-center"
                   style={{ background: "var(--surface-strong)", color: "var(--text-base)" }}
                 >
-                  <CloseIcon class="w-3 h-3" />
+                  <X class="w-3 h-3" />
                 </button>
               </div>
             )}
@@ -410,7 +361,7 @@ export function Layout(props: ParentProps) {
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-base)")}
             title="Open Project"
           >
-            <PlusIcon class="w-5 h-5" />
+            <Plus class="w-5 h-5" />
           </button>
         </div>
 
@@ -425,7 +376,7 @@ export function Layout(props: ParentProps) {
             }}
             title="Terminal (Ctrl+`)"
           >
-            <TerminalIcon class="w-5 h-5" />
+            <SquareTerminal class="w-5 h-5" />
           </button>
           <button
             onClick={() => navigate(`/${dirSlug()}/settings`)}
@@ -436,7 +387,7 @@ export function Layout(props: ParentProps) {
             }}
             title="Settings"
           >
-            <SettingsIcon class="w-5 h-5" />
+            <Settings class="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -445,10 +396,10 @@ export function Layout(props: ParentProps) {
       <div
         class="shrink-0 flex flex-col transition-all duration-200"
         style={{
-          width: sidebarExpanded() ? "256px" : "0px",
+          width: showSidebar() ? "256px" : "0px",
           overflow: "hidden",
           background: "var(--background-stronger)",
-          "border-right": sidebarExpanded() ? "1px solid var(--border-base)" : "none",
+          "border-right": showSidebar() ? "1px solid var(--border-base)" : "none",
         }}
       >
         <div class="w-64 h-full flex flex-col">
@@ -469,7 +420,7 @@ export function Layout(props: ParentProps) {
               style={{ color: "var(--icon-base)" }}
               title="Collapse Sidebar (Ctrl+B)"
             >
-              <ChevronIcon class="w-4 h-4" direction="left" />
+              <ChevronLeft class="w-4 h-4" />
             </button>
           </div>
 
@@ -477,7 +428,7 @@ export function Layout(props: ParentProps) {
           <div class="p-3">
             <Button onClick={createNewSession} variant="primary" class="w-full" size="large">
               <div class="flex items-center justify-center gap-2 w-full">
-                <PlusIcon class="w-4 h-4" />
+                <Plus class="w-4 h-4" />
                 <span>New Session</span>
               </div>
             </Button>
@@ -520,7 +471,7 @@ export function Layout(props: ParentProps) {
                           }}
                         >
                           <span class="shrink-0" style={{ color: "var(--icon-weak)" }}>
-                            <ChatIcon class="w-4 h-4" />
+                            <MessageCircle class="w-4 h-4" />
                           </span>
                           <span class="truncate">{session.title || "Untitled"}</span>
                         </A>
@@ -536,7 +487,7 @@ export function Layout(props: ParentProps) {
                           onMouseLeave={(e) => (e.currentTarget.style.color = "var(--icon-weak)")}
                           title="Archive session"
                         >
-                          <ArchiveIcon class="w-4 h-4" />
+                          <Archive class="w-4 h-4" />
                         </button>
                       </div>
                     )}
@@ -566,8 +517,10 @@ export function Layout(props: ParentProps) {
         </div>
       </div>
 
-      {/* Expand button when collapsed */}
-      <Show when={!sidebarExpanded()}>
+      {/* Expand button when manually collapsed (not on settings or small screens) */}
+      <Show
+        when={!sidebarExpanded() && !location.pathname.endsWith("/settings") && windowWidth() >= COLLAPSE_BREAKPOINT}
+      >
         <button
           onClick={toggleSidebar}
           class="absolute left-16 top-1/2 -translate-y-1/2 z-10 p-1 rounded-r-md transition-colors"
@@ -579,7 +532,7 @@ export function Layout(props: ParentProps) {
           }}
           title="Expand Sidebar (Ctrl+B)"
         >
-          <ChevronIcon class="w-4 h-4" direction="right" />
+          <ChevronRight class="w-4 h-4" />
         </button>
       </Show>
 
@@ -616,7 +569,7 @@ export function Layout(props: ParentProps) {
                         color: terminal.active() === session.id ? "var(--text-strong)" : "var(--text-weak)",
                       }}
                     >
-                      <TerminalIcon class="w-3 h-3" />
+                      <SquareTerminal class="w-3 h-3" />
                       {session.title}
                       <button
                         onClick={(e) => {
@@ -626,7 +579,7 @@ export function Layout(props: ParentProps) {
                         class="ml-1 p-0.5 rounded hover:bg-white/10"
                         style={{ color: "var(--icon-weak)" }}
                       >
-                        <CloseIcon class="w-3 h-3" />
+                        <X class="w-3 h-3" />
                       </button>
                     </div>
                   )}
@@ -637,7 +590,7 @@ export function Layout(props: ParentProps) {
                   style={{ color: "var(--icon-weak)" }}
                   title="New Terminal"
                 >
-                  <PlusIcon class="w-4 h-4" />
+                  <Plus class="w-4 h-4" />
                 </button>
               </div>
 
@@ -647,7 +600,7 @@ export function Layout(props: ParentProps) {
                 style={{ color: "var(--icon-weak)" }}
                 title="Close Terminal"
               >
-                <ChevronIcon class="w-4 h-4" direction="down" />
+                <ChevronDown class="w-4 h-4" />
               </button>
             </div>
 

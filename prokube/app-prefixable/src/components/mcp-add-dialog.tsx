@@ -1,5 +1,6 @@
 import { createSignal, Show, For } from "solid-js"
 import { useMCP, type McpLocalConfig, type McpRemoteConfig } from "../context/mcp"
+import { X, ChevronLeft, ChevronRight } from "lucide-solid"
 
 interface Props {
   onClose: () => void
@@ -199,9 +200,7 @@ export function MCPAddDialog(props: Props) {
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-            </svg>
+            <ChevronLeft class="w-5 h-5" />
           </button>
           <div class="flex-1">
             <h2 class="text-base font-medium" style={{ color: "var(--text-strong)" }}>
@@ -215,9 +214,7 @@ export function MCPAddDialog(props: Props) {
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X class="w-5 h-5" />
           </button>
         </div>
 
@@ -311,15 +308,7 @@ export function MCPAddDialog(props: Props) {
             class="flex items-center gap-2 text-sm"
             style={{ color: "var(--text-interactive-base)" }}
           >
-            <svg
-              class="w-4 h-4 transition-transform"
-              classList={{ "rotate-90": showAdvanced() }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-            </svg>
+            <ChevronRight class="w-4 h-4 transition-transform" classList={{ "rotate-90": showAdvanced() }} />
             Advanced Options
           </button>
 
@@ -385,14 +374,7 @@ export function MCPAddDialog(props: Props) {
                             class="p-1.5 rounded"
                             style={{ color: "var(--icon-critical-base)" }}
                           >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
+                            <X class="w-4 h-4" />
                           </button>
                         </div>
                       )}
@@ -446,14 +428,7 @@ export function MCPAddDialog(props: Props) {
                             class="p-1.5 rounded"
                             style={{ color: "var(--icon-critical-base)" }}
                           >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"
-                              />
-                            </svg>
+                            <X class="w-4 h-4" />
                           </button>
                         </div>
                       )}

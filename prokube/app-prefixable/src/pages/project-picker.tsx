@@ -5,6 +5,7 @@ import { useBasePath } from "../context/base-path"
 import { base64Encode } from "../utils/path"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Button } from "@opencode-ai/ui/button"
+import { Folder } from "lucide-solid"
 
 // OpenCode Wordmark
 function OpenCodeWordmark(props: { class?: string }) {
@@ -64,19 +65,6 @@ function ProkubeLogo(props: { class?: string }) {
       <path
         d="m34.55118,57.64873V23.43238h5.55266v19.12689h4.36581l8.77398-9.49465h5.93412v1.52595l-9.7913,10.76616,9.74894,10.76616v1.52585h-5.89176l-8.77398-9.49445h-4.36581v9.49445h-5.55266Z"
         fill="#fff"
-      />
-    </svg>
-  )
-}
-
-function FolderIcon(props: { class?: string; style?: { [key: string]: string } }) {
-  return (
-    <svg class={props.class} style={props.style} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        stroke-width="2"
-        d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
       />
     </svg>
   )
@@ -220,7 +208,7 @@ export function ProjectPicker() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
-                    <FolderIcon class="w-4 h-4 shrink-0" style={{ color: "var(--icon-weak)" }} />
+                    <Folder class="w-4 h-4 shrink-0" style={{ color: "var(--icon-weak)" }} />
                     <span class="truncate">{path}</span>
                   </button>
                 )}

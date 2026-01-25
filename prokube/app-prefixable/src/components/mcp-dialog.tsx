@@ -1,5 +1,6 @@
 import { createSignal, createMemo, Show, For } from "solid-js"
 import { useMCP } from "../context/mcp"
+import { X, Plus } from "lucide-solid"
 
 interface Props {
   onClose: () => void
@@ -102,9 +103,7 @@ export function MCPDialog(props: Props) {
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X class="w-5 h-5" />
           </button>
         </div>
 
@@ -207,9 +206,7 @@ export function MCPDialog(props: Props) {
             onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
             onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
+            <Plus class="w-4 h-4" />
             Add MCP Server
           </button>
         </div>
