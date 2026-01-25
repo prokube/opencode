@@ -1,6 +1,10 @@
 import { type ParentProps, createSignal, For, onMount } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "../utils/path"
+import { SDKProvider } from "../context/sdk"
+import { EventProvider } from "../context/events"
+import { ProviderProvider } from "../context/providers"
+import { MCPProvider } from "../context/mcp"
 import { ProjectDialog } from "../components/project-dialog"
 import { Plus, X, Settings, Folder } from "lucide-solid"
 
@@ -114,85 +118,96 @@ export function HomeLayout(props: ParentProps) {
   }
 
   return (
-    <div class="flex h-screen" style={{ background: "var(--background-stronger)" }}>
-      {/* Project Dialog */}
-      <ProjectDialog
-        open={projectDialogOpen()}
-        onClose={() => setProjectDialogOpen(false)}
-        onSelect={handleProjectSelect}
-      />
+    <SDKProvider>
+      <EventProvider>
+        <ProviderProvider>
+          <MCPProvider>
+            <div class="flex h-screen" style={{ background: "var(--background-stronger)" }}>
+              {/* Project Dialog */}
+              <ProjectDialog
+                open={projectDialogOpen()}
+                onClose={() => setProjectDialogOpen(false)}
+                onSelect={handleProjectSelect}
+              />
 
-      {/* Left: Project Icons Strip */}
-      <div
-        class="w-16 shrink-0 flex flex-col items-center"
-        style={{ background: "var(--background-base)", "border-right": "1px solid var(--border-base)" }}
-      >
-        {/* Prokube Logo */}
-        <button
-          onClick={() => setProjectDialogOpen(true)}
-          class="w-full flex items-center justify-center py-3 transition-opacity hover:opacity-80"
-          style={{ "border-bottom": "1px solid var(--border-base)" }}
-          title="Open Project"
-        >
-          <OpenCodeLogo class="w-8 h-10 rounded" />
-        </button>
-
-        {/* Project icons */}
-        <div class="flex-1 flex flex-col items-center gap-2 overflow-y-auto w-full px-2 py-3">
-          <For each={projects()}>
-            {(project) => (
+              {/* Left: Project Icons Strip */}
               <div
-                onClick={() => navigateToProject(project.worktree)}
-                class="group relative cursor-pointer"
-                title={project.name || getFilename(project.worktree)}
+                class="w-16 shrink-0 flex flex-col items-center"
+                style={{ background: "var(--background-base)", "border-right": "1px solid var(--border-base)" }}
               >
-                <ProjectAvatar project={project} size="large" selected={false} />
+                {/* Prokube Logo */}
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    removeProject(project.worktree)
-                  }}
-                  class="absolute -top-1 -right-1 w-4 h-4 rounded-full hidden group-hover:flex items-center justify-center"
-                  style={{ background: "var(--surface-strong)", color: "var(--text-base)" }}
+                  onClick={() => setProjectDialogOpen(true)}
+                  class="w-full flex items-center justify-center py-3 transition-opacity hover:opacity-80"
+                  style={{ "border-bottom": "1px solid var(--border-base)" }}
+                  title="Open Project"
                 >
-                  <X class="w-3 h-3" />
+                  <OpenCodeLogo class="w-8 h-10 rounded" />
                 </button>
+
+                {/* Project icons */}
+                <div class="flex-1 flex flex-col items-center gap-2 overflow-y-auto w-full px-2 py-3">
+                  <For each={projects()}>
+                    {(project) => (
+                      <div
+                        onClick={() => navigateToProject(project.worktree)}
+                        class="group relative cursor-pointer"
+                        title={project.name || getFilename(project.worktree)}
+                      >
+                        <ProjectAvatar project={project} size="large" selected={false} />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeProject(project.worktree)
+                          }}
+                          class="absolute -top-1 -right-1 w-4 h-4 rounded-full hidden group-hover:flex items-center justify-center"
+                          style={{ background: "var(--surface-strong)", color: "var(--text-base)" }}
+                        >
+                          <X class="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </For>
+
+                  {/* Add project button */}
+                  <button
+                    onClick={() => setProjectDialogOpen(true)}
+                    class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+                    style={{ border: "2px dashed var(--border-base)", color: "var(--icon-weak)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-base)")}
+                    title="Open Project"
+                  >
+                    <Plus class="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Bottom: Settings */}
+                <div
+                  class="flex flex-col items-center gap-2 py-3"
+                  style={{ "border-top": "1px solid var(--border-base)" }}
+                >
+                  <button
+                    onClick={() => navigate("/settings")}
+                    class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
+                    style={{ color: "var(--icon-base)" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    title="Settings"
+                  >
+                    <Settings class="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            )}
-          </For>
 
-          {/* Add project button */}
-          <button
-            onClick={() => setProjectDialogOpen(true)}
-            class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
-            style={{ border: "2px dashed var(--border-base)", color: "var(--icon-weak)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--border-strong)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-base)")}
-            title="Open Project"
-          >
-            <Plus class="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Bottom: Settings */}
-        <div class="flex flex-col items-center gap-2 py-3" style={{ "border-top": "1px solid var(--border-base)" }}>
-          <button
-            onClick={() => navigate("/settings")}
-            class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
-            style={{ color: "var(--icon-base)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            title="Settings"
-          >
-            <Settings class="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main class="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--background-stronger)" }}>
-        {props.children}
-      </main>
-    </div>
+              {/* Main Content */}
+              <main class="flex-1 flex flex-col overflow-hidden" style={{ background: "var(--background-stronger)" }}>
+                {props.children}
+              </main>
+            </div>
+          </MCPProvider>
+        </ProviderProvider>
+      </EventProvider>
+    </SDKProvider>
   )
 }

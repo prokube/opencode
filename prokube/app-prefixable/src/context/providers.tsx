@@ -175,8 +175,9 @@ export function ProviderProvider(props: ParentProps) {
         method: methodIndex,
         code,
       })
-      // Refresh provider list
-      refetchProviders()
+      // Refresh provider list and wait for it to complete
+      await refetchProviders()
+      console.log("[Providers] Refetched after OAuth, connected:", providerData()?.connected)
       return true
     } catch (e) {
       console.error("Failed to complete OAuth:", e)

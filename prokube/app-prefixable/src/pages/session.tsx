@@ -1037,7 +1037,6 @@ export function Session() {
                       "--tw-ring-color": "var(--interactive-base)",
                     } as any
                   }
-                  disabled={loading() || processing()}
                 />
                 {/* Hint for slash commands */}
                 <Show when={!input() && !loading() && !processing()}>

@@ -16,6 +16,7 @@ function AppRoutes() {
       {/* Root: Show project picker with sidebar */}
       <Route path="/" component={HomeLayout}>
         <Route path="/" component={ProjectPicker} />
+        <Route path="/settings" component={Settings} />
       </Route>
 
       {/* Directory-scoped routes */}

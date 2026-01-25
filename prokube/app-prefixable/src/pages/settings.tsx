@@ -4,7 +4,7 @@ import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
-import { Check, Copy, Plug, GitBranch, Server, Cpu, Bot, ExternalLink, Key } from "lucide-solid"
+import { Check, Copy, Plug, GitBranch, Server, Cpu, Bot, ExternalLink, Key, Search, X } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
@@ -19,14 +19,20 @@ export function Settings() {
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
 
+  // Provider search
+  const [providerSearch, setProviderSearch] = createSignal("")
+
   // OAuth state
   const [oauthPending, setOauthPending] = createSignal<{
     providerID: string
+    providerName: string
     methodIndex: number
     method: "auto" | "code"
     instructions: string
+    code: string // Extracted code from instructions (e.g., "XXXX-YYYY")
   } | null>(null)
   const [oauthCode, setOauthCode] = createSignal("")
+  const [codeCopied, setCodeCopied] = createSignal(false)
 
   // Git SSH Key state
   const [sshKeys, setSshKeys] = createSignal<Array<{ name: string; content: string }>>([])
@@ -42,6 +48,30 @@ export function Settings() {
     const id = selectedProvider()
     if (!id) return []
     return providers.authMethods[id] || []
+  })
+
+  // Popular providers shown first
+  const popularProviders = ["opencode", "anthropic", "github-copilot", "openai", "google", "openrouter"]
+
+  // Filtered and sorted providers for display
+  const filteredProviders = createMemo(() => {
+    const search = providerSearch().toLowerCase().trim()
+    const unconnected = providers.providers.filter((p) => !providers.connected.includes(p.id))
+
+    // Filter by search
+    const filtered = search
+      ? unconnected.filter((p) => p.name.toLowerCase().includes(search) || p.id.toLowerCase().includes(search))
+      : unconnected
+
+    // Sort: popular first, then alphabetically
+    return filtered.sort((a, b) => {
+      const aPopular = popularProviders.indexOf(a.id)
+      const bPopular = popularProviders.indexOf(b.id)
+      if (aPopular >= 0 && bPopular >= 0) return aPopular - bPopular
+      if (aPopular >= 0) return -1
+      if (bPopular >= 0) return 1
+      return a.name.localeCompare(b.name)
+    })
   })
 
   // Get currently selected key content
@@ -224,53 +254,64 @@ export function Settings() {
   }
 
   async function handleOAuthStart(providerID: string, methodIndex: number) {
-    setConnecting(true)
     setError(null)
     setSuccess(null)
 
     const result = await providers.startOAuth(providerID, methodIndex)
 
     if (result) {
-      // Open the authorization URL
-      window.open(result.url, "_blank")
+      // Extract code from instructions (e.g., "Enter code: XXXX-YYYY" -> "XXXX-YYYY")
+      const codeMatch = result.instructions.match(/:\s*([A-Z0-9]{4}-[A-Z0-9]{4})/i)
+      const code = codeMatch ? codeMatch[1] : ""
+
+      const providerName = getProviderDisplayName(providerID)
 
       if (result.method === "code") {
         // User needs to enter a code manually
         setOauthPending({
           providerID,
+          providerName,
           methodIndex,
           method: "code",
           instructions: result.instructions,
+          code,
         })
-        setConnecting(false)
+        // Open the authorization URL
+        window.open(result.url, "_blank")
       } else {
-        // Auto method (device flow) - show waiting state and immediately start polling
+        // Auto method (device flow) - show code immediately, then start polling
         setOauthPending({
           providerID,
+          providerName,
           methodIndex,
           method: "auto",
           instructions: result.instructions,
+          code,
         })
+
+        // Open the authorization URL
+        window.open(result.url, "_blank")
 
         // Start the callback immediately - it will poll until user authorizes
         // This call blocks until authorization succeeds or fails
-        console.log("[OAuth] Starting auto callback for", providerID)
+        console.log("[OAuth] Starting auto callback for", providerID, "with code:", code)
+        setConnecting(true)
         const ok = await providers.completeOAuth(providerID, methodIndex)
         console.log("[OAuth] Callback result:", ok)
+        setConnecting(false)
 
         if (ok) {
-          setSuccess(`Connected to ${getProviderDisplayName(providerID)}!`)
+          setSuccess(`Connected to ${providerName}!`)
           setOauthPending(null)
           setSelectedProvider(null)
+          setProviderSearch("")
         } else {
           setError("Authentication failed or was cancelled. Please try again.")
           setOauthPending(null)
         }
-        setConnecting(false)
       }
     } else {
       setError("Failed to start authentication.")
-      setConnecting(false)
     }
   }
 
@@ -287,10 +328,11 @@ export function Settings() {
     setConnecting(false)
 
     if (ok) {
-      setSuccess(`Connected to ${getProviderDisplayName(pending.providerID)}!`)
+      setSuccess(`Connected to ${pending.providerName}!`)
       setOauthPending(null)
       setOauthCode("")
       setSelectedProvider(null)
+      setProviderSearch("")
     } else {
       setError("Failed to complete authentication. Please try again.")
     }
@@ -299,7 +341,20 @@ export function Settings() {
   function cancelOAuth() {
     setOauthPending(null)
     setOauthCode("")
+    setCodeCopied(false)
     setConnecting(false)
+  }
+
+  async function copyCode() {
+    const pending = oauthPending()
+    if (!pending?.code) return
+    try {
+      await navigator.clipboard.writeText(pending.code)
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 2000)
+    } catch (e) {
+      console.error("Failed to copy code:", e)
+    }
   }
 
   function getProviderDisplayName(id: string): string {
@@ -436,56 +491,224 @@ export function Settings() {
                   </h2>
                 </div>
                 <div class="p-4">
+                  {/* Success/Error messages at top */}
                   <Show when={success()}>
-                    <div class="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-md text-sm">
-                      {success()}
+                    <div class="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-md text-sm flex items-center justify-between">
+                      <span>{success()}</span>
+                      <button onClick={() => setSuccess(null)} class="ml-2">
+                        <X class="w-4 h-4" />
+                      </button>
                     </div>
                   </Show>
 
                   <Show when={error()}>
-                    <div class="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded-md text-sm">
-                      {error()}
+                    <div class="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded-md text-sm flex items-center justify-between">
+                      <span>{error()}</span>
+                      <button onClick={() => setError(null)} class="ml-2">
+                        <X class="w-4 h-4" />
+                      </button>
                     </div>
                   </Show>
 
-                  <form onSubmit={handleConnect} class="space-y-4">
-                    {/* Provider Selection */}
-                    <div>
-                      <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
-                        Select Provider
-                      </label>
-                      <div class="grid grid-cols-2 gap-2">
-                        <For each={providers.providers.filter((p) => !providers.connected.includes(p.id))}>
-                          {(provider) => (
+                  {/* OAuth Pending - show prominently at top */}
+                  <Show when={oauthPending()}>
+                    {(pending) => (
+                      <div
+                        class="mb-4 p-4 rounded-lg"
+                        style={{
+                          background: "var(--surface-inset)",
+                          border: "1px solid var(--border-base)",
+                        }}
+                      >
+                        <div class="flex items-center justify-between mb-3">
+                          <span class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
+                            Connecting to {pending().providerName}
+                          </span>
+                          <Show when={!connecting()}>
+                            <button
+                              onClick={cancelOAuth}
+                              class="text-xs px-2 py-1 rounded"
+                              style={{ color: "var(--text-weak)" }}
+                            >
+                              Cancel
+                            </button>
+                          </Show>
+                        </div>
+
+                        {/* Show the code prominently with copy button */}
+                        <Show when={pending().code}>
+                          <div class="mb-3">
+                            <div class="text-xs mb-1" style={{ color: "var(--text-weak)" }}>
+                              Enter this code on GitHub:
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <code
+                                class="text-2xl font-mono font-bold tracking-wider px-4 py-2 rounded"
+                                style={{
+                                  background: "var(--background-base)",
+                                  color: "var(--text-strong)",
+                                  border: "1px solid var(--border-base)",
+                                }}
+                              >
+                                {pending().code}
+                              </code>
+                              <button
+                                onClick={copyCode}
+                                class="p-2 rounded transition-colors"
+                                style={{
+                                  background: "var(--background-base)",
+                                  border: "1px solid var(--border-base)",
+                                  color: codeCopied() ? "var(--icon-success-base)" : "var(--icon-base)",
+                                }}
+                                title="Copy code"
+                              >
+                                <Show when={codeCopied()} fallback={<Copy class="w-4 h-4" />}>
+                                  <Check class="w-4 h-4" />
+                                </Show>
+                              </button>
+                            </div>
+                          </div>
+                        </Show>
+
+                        {/* Auto method - show waiting spinner */}
+                        <Show when={pending().method === "auto"}>
+                          <div class="flex items-center gap-2">
+                            <Spinner class="w-4 h-4" />
+                            <span class="text-sm" style={{ color: "var(--text-weak)" }}>
+                              Waiting for authorization...
+                            </span>
+                          </div>
+                        </Show>
+
+                        {/* Code method - show input */}
+                        <Show when={pending().method === "code"}>
+                          <div class="space-y-2">
+                            <input
+                              type="text"
+                              value={oauthCode()}
+                              onInput={(e) => setOauthCode(e.currentTarget.value)}
+                              placeholder="Paste authorization code here..."
+                              class="w-full px-3 py-2 rounded-md text-sm font-mono"
+                              style={{
+                                background: "var(--background-base)",
+                                border: "1px solid var(--border-base)",
+                                color: "var(--text-base)",
+                              }}
+                            />
                             <button
                               type="button"
-                              onClick={() => setSelectedProvider(provider.id)}
-                              class="p-3 rounded-md text-left transition-colors"
+                              disabled={connecting() || !oauthCode().trim()}
+                              onClick={handleOAuthComplete}
+                              class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
                               style={{
-                                border:
-                                  selectedProvider() === provider.id
-                                    ? "1px solid var(--interactive-base)"
-                                    : "1px solid var(--border-base)",
-                                background: selectedProvider() === provider.id ? "var(--surface-inset)" : "transparent",
+                                background: "var(--interactive-base)",
+                                color: "white",
                               }}
                             >
-                              <div class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
-                                {provider.name}
-                              </div>
-                              <div class="text-xs" style={{ color: "var(--text-weak)" }}>
-                                {Object.keys(provider.models).length} models
-                              </div>
+                              <Show when={connecting()} fallback="Complete Authentication">
+                                <Spinner class="w-4 h-4" />
+                                Verifying...
+                              </Show>
                             </button>
-                          )}
-                        </For>
+                          </div>
+                        </Show>
                       </div>
+                    )}
+                  </Show>
 
-                      <Show when={providers.providers.filter((p) => !providers.connected.includes(p.id)).length === 0}>
-                        <p class="text-sm" style={{ color: "var(--text-weak)" }}>
-                          All available providers are connected!
-                        </p>
-                      </Show>
-                    </div>
+                  <form onSubmit={handleConnect} class="space-y-4">
+                    {/* Search and Provider Selection */}
+                    <Show when={!oauthPending()}>
+                      <div>
+                        {/* Search input */}
+                        <div class="relative mb-3">
+                          <Search
+                            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
+                            style={{ color: "var(--text-weak)" }}
+                          />
+                          <input
+                            type="text"
+                            value={providerSearch()}
+                            onInput={(e) => setProviderSearch(e.currentTarget.value)}
+                            placeholder="Search providers..."
+                            class="w-full pl-9 pr-8 py-2 rounded-md text-sm"
+                            style={{
+                              background: "var(--background-base)",
+                              border: "1px solid var(--border-base)",
+                              color: "var(--text-base)",
+                            }}
+                          />
+                          <Show when={providerSearch()}>
+                            <button
+                              type="button"
+                              onClick={() => setProviderSearch("")}
+                              class="absolute right-2 top-1/2 -translate-y-1/2 p-1"
+                              style={{ color: "var(--text-weak)" }}
+                            >
+                              <X class="w-4 h-4" />
+                            </button>
+                          </Show>
+                        </div>
+
+                        {/* Provider grid - max height with scroll */}
+                        <div class="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                          <For each={filteredProviders()}>
+                            {(provider) => (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedProvider(provider.id)}
+                                class="p-3 rounded-md text-left transition-colors"
+                                style={{
+                                  border:
+                                    selectedProvider() === provider.id
+                                      ? "1px solid var(--interactive-base)"
+                                      : "1px solid var(--border-base)",
+                                  background:
+                                    selectedProvider() === provider.id ? "var(--surface-inset)" : "transparent",
+                                }}
+                              >
+                                <div class="flex items-center gap-2">
+                                  <span class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
+                                    {provider.name}
+                                  </span>
+                                  <Show when={provider.id === "opencode"}>
+                                    <span
+                                      class="text-xs px-1.5 py-0.5 rounded"
+                                      style={{
+                                        background: "var(--interactive-base)",
+                                        color: "white",
+                                      }}
+                                    >
+                                      Recommended
+                                    </span>
+                                  </Show>
+                                </div>
+                                <div class="text-xs" style={{ color: "var(--text-weak)" }}>
+                                  {Object.keys(provider.models).length} models
+                                </div>
+                              </button>
+                            )}
+                          </For>
+                        </div>
+
+                        <Show when={filteredProviders().length === 0 && providerSearch()}>
+                          <p class="text-sm text-center py-4" style={{ color: "var(--text-weak)" }}>
+                            No providers found matching "{providerSearch()}"
+                          </p>
+                        </Show>
+
+                        <Show
+                          when={
+                            providers.providers.filter((p) => !providers.connected.includes(p.id)).length === 0 &&
+                            !providerSearch()
+                          }
+                        >
+                          <p class="text-sm" style={{ color: "var(--text-weak)" }}>
+                            All available providers are connected!
+                          </p>
+                        </Show>
+                      </div>
+                    </Show>
 
                     {/* Auth Methods for Selected Provider */}
                     <Show when={selectedProvider() && !oauthPending()}>
@@ -599,80 +822,6 @@ export function Settings() {
                           Your credentials are stored securely and never shared.
                         </p>
                       </div>
-                    </Show>
-
-                    {/* OAuth Pending - waiting for authorization */}
-                    <Show when={oauthPending()}>
-                      {(pending) => (
-                        <div class="space-y-3">
-                          <div
-                            class="p-3 rounded-md text-sm"
-                            style={{
-                              background: "var(--surface-inset)",
-                              color: "var(--text-base)",
-                            }}
-                          >
-                            {pending().instructions}
-                          </div>
-
-                          {/* Auto method - just show waiting spinner */}
-                          <Show when={pending().method === "auto"}>
-                            <div class="flex items-center justify-center gap-3 py-4">
-                              <Spinner class="w-5 h-5" />
-                              <span class="text-sm" style={{ color: "var(--text-base)" }}>
-                                Waiting for authorization...
-                              </span>
-                            </div>
-                            <p class="text-xs text-center" style={{ color: "var(--text-weak)" }}>
-                              Complete the authorization in the browser window, then return here.
-                            </p>
-                          </Show>
-
-                          {/* Code method - show input and submit button */}
-                          <Show when={pending().method === "code"}>
-                            <input
-                              type="text"
-                              value={oauthCode()}
-                              onInput={(e) => setOauthCode(e.currentTarget.value)}
-                              placeholder="Enter the code..."
-                              class="w-full px-3 py-2 rounded-md text-sm font-mono"
-                              style={{
-                                background: "var(--background-base)",
-                                border: "1px solid var(--border-base)",
-                                color: "var(--text-base)",
-                              }}
-                            />
-                            <div class="flex gap-2">
-                              <button
-                                type="button"
-                                disabled={connecting() || !oauthCode().trim()}
-                                onClick={handleOAuthComplete}
-                                class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
-                                style={{
-                                  background: "var(--interactive-base)",
-                                  color: "white",
-                                }}
-                              >
-                                <Show when={connecting()} fallback="Complete Authentication">
-                                  <Spinner class="w-4 h-4" />
-                                  Verifying...
-                                </Show>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={cancelOAuth}
-                                class="px-4 py-2 rounded-md text-sm transition-colors"
-                                style={{
-                                  background: "var(--surface-inset)",
-                                  color: "var(--text-base)",
-                                }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </Show>
-                        </div>
-                      )}
                     </Show>
                   </form>
                 </div>
