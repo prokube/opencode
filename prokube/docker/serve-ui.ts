@@ -4,17 +4,20 @@
  * This server:
  * 1. Serves static files from /opt/opencode-ui/dist
  * 2. Proxies API requests to the OpenCode API server (localhost:4096)
- * 3. Injects NB_PREFIX into index.html at runtime
+ * 3. Proxies WebSocket connections for PTY terminal sessions
+ * 4. Injects NB_PREFIX into index.html at runtime
  */
 
 const BASE_PATH = process.env.NB_PREFIX || process.env.BASE_PATH || "/"
 const PORT = parseInt(process.env.PORT || "8888", 10)
 const API_URL = process.env.API_URL || "http://127.0.0.1:4096"
+const WS_API_URL = API_URL.replace(/^http/, "ws")
 const DIST_DIR = process.env.DIST_DIR || "/opt/opencode-ui/dist"
 
 console.log(`OpenCode UI Server starting...`)
 console.log(`  BASE_PATH: ${BASE_PATH}`)
 console.log(`  API_URL: ${API_URL}`)
+console.log(`  WS_API_URL: ${WS_API_URL}`)
 console.log(`  PORT: ${PORT}`)
 console.log(`  DIST_DIR: ${DIST_DIR}`)
 
@@ -73,12 +76,20 @@ function isApiPath(path: string): boolean {
   return apiPaths.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"))
 }
 
-const server = Bun.serve({
+// Check if this is a PTY WebSocket connection request
+function isPtyWebSocket(path: string): boolean {
+  return /^\/pty\/[^/]+\/connect/.test(path)
+}
+
+// Store for backend WebSocket connections (keyed by client WebSocket)
+const backendConnections = new WeakMap<object, WebSocket>()
+
+const server = Bun.serve<{ path: string; search: string }>({
   port: PORT,
   hostname: "0.0.0.0",
   idleTimeout: 0, // Disable timeout for SSE connections
 
-  async fetch(req) {
+  async fetch(req, server) {
     const url = new URL(req.url)
     let path = url.pathname
 
@@ -88,6 +99,21 @@ const server = Bun.serve({
     }
     if (!path.startsWith("/")) {
       path = "/" + path
+    }
+
+    // Handle WebSocket upgrade for PTY connections
+    if (isPtyWebSocket(path)) {
+      const upgradeHeader = req.headers.get("Upgrade")
+      if (upgradeHeader?.toLowerCase() === "websocket") {
+        console.log("[Proxy] WebSocket upgrade for PTY:", path)
+        const success = server.upgrade(req, {
+          data: { path, search: url.search },
+        })
+        if (success) {
+          return undefined // Bun handles the response
+        }
+        return new Response("WebSocket upgrade failed", { status: 500 })
+      }
     }
 
     // Check if this is an API request (after stripping prefix)
@@ -181,6 +207,61 @@ const server = Bun.serve({
         "Cache-Control": "no-cache",
       },
     })
+  },
+
+  // WebSocket handler for PTY proxy
+  websocket: {
+    open(ws) {
+      const { path, search } = ws.data
+      const targetUrl = `${WS_API_URL}${path}${search}`
+      console.log("[Proxy] Opening backend WebSocket to:", targetUrl)
+
+      const backend = new WebSocket(targetUrl)
+
+      backend.addEventListener("open", () => {
+        console.log("[Proxy] Backend WebSocket connected")
+      })
+
+      backend.addEventListener("message", (event) => {
+        // Forward backend messages to client
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(event.data)
+        }
+      })
+
+      backend.addEventListener("close", (event) => {
+        console.log("[Proxy] Backend WebSocket closed:", event.code, event.reason)
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(event.code, event.reason)
+        }
+      })
+
+      backend.addEventListener("error", (error) => {
+        console.error("[Proxy] Backend WebSocket error:", error)
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1011, "Backend connection error")
+        }
+      })
+
+      backendConnections.set(ws, backend)
+    },
+
+    message(ws, message) {
+      // Forward client messages to backend
+      const backend = backendConnections.get(ws)
+      if (backend?.readyState === WebSocket.OPEN) {
+        backend.send(message)
+      }
+    },
+
+    close(ws, code, reason) {
+      console.log("[Proxy] Client WebSocket closed:", code, reason)
+      const backend = backendConnections.get(ws)
+      if (backend?.readyState === WebSocket.OPEN) {
+        backend.close(code, reason)
+      }
+      backendConnections.delete(ws)
+    },
   },
 })
 
