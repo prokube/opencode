@@ -79,7 +79,13 @@ export function base64Encode(value: string): string {
 
 export function base64Decode(value: string): string {
   // Restore standard base64 chars
-  const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"))
+  let base64 = value.replace(/-/g, "+").replace(/_/g, "/")
+  // Restore padding (base64 must be multiple of 4)
+  const pad = base64.length % 4
+  if (pad) {
+    base64 += "=".repeat(4 - pad)
+  }
+  const binary = atob(base64)
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
   return new TextDecoder().decode(bytes)
 }

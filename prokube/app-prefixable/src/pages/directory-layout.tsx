@@ -17,8 +17,15 @@ export function DirectoryLayout(props: ParentProps) {
 
   const directory = createMemo(() => {
     try {
-      return base64Decode(params.dir)
-    } catch {
+      const decoded = base64Decode(params.dir)
+      // Validate the decoded path looks reasonable (starts with / or ~)
+      if (decoded && (decoded.startsWith("/") || decoded.startsWith("~"))) {
+        return decoded
+      }
+      console.error("[DirectoryLayout] Invalid decoded path:", decoded)
+      return undefined
+    } catch (e) {
+      console.error("[DirectoryLayout] Failed to decode directory:", params.dir, e)
       return undefined
     }
   })

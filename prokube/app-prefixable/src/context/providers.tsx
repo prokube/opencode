@@ -42,6 +42,12 @@ interface ProviderListData {
   default: Record<string, string>
 }
 
+interface OAuthAuthorization {
+  url: string
+  method: "auto" | "code"
+  instructions: string
+}
+
 interface ProviderContextValue {
   providers: Provider[]
   connected: string[]
@@ -55,6 +61,8 @@ interface ProviderContextValue {
   setSelectedAgent: (agent: string) => void
   refetch: () => void
   connectProvider: (providerID: string, apiKey: string) => Promise<boolean>
+  startOAuth: (providerID: string, methodIndex: number) => Promise<OAuthAuthorization | undefined>
+  completeOAuth: (providerID: string, methodIndex: number, code?: string) => Promise<boolean>
 }
 
 const ProviderContext = createContext<ProviderContextValue>()
@@ -147,6 +155,35 @@ export function ProviderProvider(props: ParentProps) {
     }
   }
 
+  async function startOAuth(providerID: string, methodIndex: number): Promise<OAuthAuthorization | undefined> {
+    try {
+      const res = await client.provider.oauth.authorize({
+        providerID,
+        method: methodIndex,
+      })
+      return res.data as OAuthAuthorization | undefined
+    } catch (e) {
+      console.error("Failed to start OAuth:", e)
+      return undefined
+    }
+  }
+
+  async function completeOAuth(providerID: string, methodIndex: number, code?: string): Promise<boolean> {
+    try {
+      await client.provider.oauth.callback({
+        providerID,
+        method: methodIndex,
+        code,
+      })
+      // Refresh provider list
+      refetchProviders()
+      return true
+    } catch (e) {
+      console.error("Failed to complete OAuth:", e)
+      return false
+    }
+  }
+
   function refetch() {
     refetchProviders()
     refetchAgents()
@@ -183,6 +220,8 @@ export function ProviderProvider(props: ParentProps) {
     setSelectedAgent,
     refetch,
     connectProvider,
+    startOAuth,
+    completeOAuth,
   }
 
   return <ProviderContext.Provider value={value}>{props.children}</ProviderContext.Provider>

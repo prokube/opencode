@@ -1,10 +1,10 @@
-import { createSignal, For, Show, type JSX } from "solid-js"
+import { createSignal, For, Show, type JSX, createMemo } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
-import { Check, Copy, Plug, GitBranch, Server, Cpu, Bot } from "lucide-solid"
+import { Check, Copy, Plug, GitBranch, Server, Cpu, Bot, ExternalLink, Key } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
@@ -19,6 +19,15 @@ export function Settings() {
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
 
+  // OAuth state
+  const [oauthPending, setOauthPending] = createSignal<{
+    providerID: string
+    methodIndex: number
+    method: "auto" | "code"
+    instructions: string
+  } | null>(null)
+  const [oauthCode, setOauthCode] = createSignal("")
+
   // Git SSH Key state
   const [sshKeys, setSshKeys] = createSignal<Array<{ name: string; content: string }>>([])
   const [selectedKeyName, setSelectedKeyName] = createSignal<string | null>(null)
@@ -27,6 +36,13 @@ export function Settings() {
   const [sshKeyError, setSshKeyError] = createSignal<string | null>(null)
   const [sshKeyCopied, setSshKeyCopied] = createSignal(false)
   const [sshKeyLoaded, setSshKeyLoaded] = createSignal(false)
+
+  // Get auth methods for selected provider
+  const selectedProviderAuthMethods = createMemo(() => {
+    const id = selectedProvider()
+    if (!id) return []
+    return providers.authMethods[id] || []
+  })
 
   // Get currently selected key content
   const selectedKey = () => {
@@ -45,41 +61,59 @@ export function Settings() {
   }
 
   async function runPtyCommand(command: string, timeout = 3000): Promise<string> {
-    const ptyRes = await client.pty.create({
-      command: "/bin/sh",
-      args: ["-c", command + "; exit"],
-    })
-
-    if (!ptyRes.data?.id) return ""
-
-    const ptyId = ptyRes.data.id
-    const wsUrl = url.replace(/^http/, "ws") + `/pty/${ptyId}/connect?directory=${encodeURIComponent(directory || "")}`
-
-    const output = await new Promise<string>((resolve) => {
-      let data = ""
-      const ws = new WebSocket(wsUrl)
-      const timeoutId = setTimeout(() => {
-        ws.close()
-        resolve(data)
-      }, timeout)
-
-      ws.addEventListener("message", (event) => {
-        data += event.data
+    try {
+      const ptyRes = await client.pty.create({
+        command: "/bin/sh",
+        args: ["-c", command + "; exit"],
       })
 
-      ws.addEventListener("close", () => {
-        clearTimeout(timeoutId)
-        resolve(data)
+      if (!ptyRes.data?.id) {
+        console.error("[runPtyCommand] Failed to create PTY:", ptyRes)
+        return ""
+      }
+
+      const ptyId = ptyRes.data.id
+      // Use empty directory for SSH operations - they work in home dir
+      const wsUrl = url.replace(/^http/, "ws") + `/pty/${ptyId}/connect`
+      console.log("[runPtyCommand] Connecting to:", wsUrl)
+
+      const output = await new Promise<string>((resolve) => {
+        let data = ""
+        const ws = new WebSocket(wsUrl)
+
+        ws.addEventListener("open", () => {
+          console.log("[runPtyCommand] WebSocket connected")
+        })
+
+        const timeoutId = setTimeout(() => {
+          console.log("[runPtyCommand] Timeout, closing WebSocket")
+          ws.close()
+          resolve(data)
+        }, timeout)
+
+        ws.addEventListener("message", (event) => {
+          data += event.data
+        })
+
+        ws.addEventListener("close", () => {
+          console.log("[runPtyCommand] WebSocket closed, output length:", data.length)
+          clearTimeout(timeoutId)
+          resolve(data)
+        })
+
+        ws.addEventListener("error", (e) => {
+          console.error("[runPtyCommand] WebSocket error:", e)
+          clearTimeout(timeoutId)
+          resolve(data)
+        })
       })
 
-      ws.addEventListener("error", () => {
-        clearTimeout(timeoutId)
-        resolve(data)
-      })
-    })
-
-    await client.pty.remove({ ptyID: ptyId }).catch(() => {})
-    return output
+      await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+      return output
+    } catch (e) {
+      console.error("[runPtyCommand] Error:", e)
+      return ""
+    }
   }
 
   async function loadSshKeys() {
@@ -187,6 +221,79 @@ export function Settings() {
     } else {
       setError("Failed to connect. Please check your API key.")
     }
+  }
+
+  async function handleOAuthStart(providerID: string, methodIndex: number) {
+    setConnecting(true)
+    setError(null)
+    setSuccess(null)
+
+    const result = await providers.startOAuth(providerID, methodIndex)
+
+    if (result) {
+      // Open the authorization URL
+      window.open(result.url, "_blank")
+
+      if (result.method === "code") {
+        // User needs to enter a code
+        setOauthPending({
+          providerID,
+          methodIndex,
+          method: "code",
+          instructions: result.instructions,
+        })
+        setConnecting(false)
+      } else {
+        // Auto method - poll or wait for callback
+        setOauthPending({
+          providerID,
+          methodIndex,
+          method: "auto",
+          instructions: result.instructions,
+        })
+        // Try to complete the OAuth after a short delay
+        setTimeout(async () => {
+          const ok = await providers.completeOAuth(providerID, methodIndex)
+          if (ok) {
+            setSuccess(`Connected to ${getProviderDisplayName(providerID)}!`)
+            setOauthPending(null)
+            setSelectedProvider(null)
+          }
+          setConnecting(false)
+        }, 2000)
+      }
+    } else {
+      setError("Failed to start authentication.")
+      setConnecting(false)
+    }
+  }
+
+  async function handleOAuthComplete() {
+    const pending = oauthPending()
+    if (!pending) return
+
+    setConnecting(true)
+    setError(null)
+
+    const code = pending.method === "code" ? oauthCode().trim() : undefined
+    const ok = await providers.completeOAuth(pending.providerID, pending.methodIndex, code)
+
+    setConnecting(false)
+
+    if (ok) {
+      setSuccess(`Connected to ${getProviderDisplayName(pending.providerID)}!`)
+      setOauthPending(null)
+      setOauthCode("")
+      setSelectedProvider(null)
+    } else {
+      setError("Failed to complete authentication. Please try again.")
+    }
+  }
+
+  function cancelOAuth() {
+    setOauthPending(null)
+    setOauthCode("")
+    setConnecting(false)
   }
 
   function getProviderDisplayName(id: string): string {
@@ -374,43 +481,179 @@ export function Settings() {
                       </Show>
                     </div>
 
-                    {/* API Key Input */}
-                    <Show when={selectedProvider()}>
-                      <div>
-                        <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
-                          API Key for {getProviderDisplayName(selectedProvider()!)}
+                    {/* Auth Methods for Selected Provider */}
+                    <Show when={selectedProvider() && !oauthPending()}>
+                      <div class="space-y-3">
+                        <label class="block text-sm font-medium" style={{ color: "var(--text-base)" }}>
+                          Connect {getProviderDisplayName(selectedProvider()!)}
                         </label>
-                        <input
-                          type="password"
-                          value={apiKey()}
-                          onInput={(e) => setApiKey(e.currentTarget.value)}
-                          placeholder="Enter your API key..."
-                          class="w-full px-3 py-2 rounded-md text-sm"
-                          style={{
-                            background: "var(--background-base)",
-                            border: "1px solid var(--border-base)",
-                            color: "var(--text-base)",
-                          }}
-                        />
-                        <p class="text-xs mt-1" style={{ color: "var(--text-weak)" }}>
-                          Your API key is stored securely and never shared.
+
+                        {/* Show auth method buttons */}
+                        <Show
+                          when={selectedProviderAuthMethods().length > 0}
+                          fallback={
+                            /* Fallback to API key input if no auth methods defined */
+                            <div class="space-y-3">
+                              <input
+                                type="password"
+                                value={apiKey()}
+                                onInput={(e) => setApiKey(e.currentTarget.value)}
+                                placeholder="Enter your API key..."
+                                class="w-full px-3 py-2 rounded-md text-sm"
+                                style={{
+                                  background: "var(--background-base)",
+                                  border: "1px solid var(--border-base)",
+                                  color: "var(--text-base)",
+                                }}
+                              />
+                              <button
+                                type="submit"
+                                disabled={connecting() || !apiKey().trim()}
+                                class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                                style={{
+                                  background: "var(--interactive-base)",
+                                  color: "white",
+                                }}
+                              >
+                                <Show when={connecting()} fallback="Connect with API Key">
+                                  <Spinner class="w-4 h-4" />
+                                  Connecting...
+                                </Show>
+                              </button>
+                            </div>
+                          }
+                        >
+                          <div class="space-y-2">
+                            <For each={selectedProviderAuthMethods()}>
+                              {(method, index) => (
+                                <Show
+                                  when={method.type === "oauth"}
+                                  fallback={
+                                    /* API key method */
+                                    <div class="space-y-2">
+                                      <div
+                                        class="flex items-center gap-2 text-xs"
+                                        style={{ color: "var(--text-weak)" }}
+                                      >
+                                        <Key class="w-3 h-3" />
+                                        <span>{method.label}</span>
+                                      </div>
+                                      <input
+                                        type="password"
+                                        value={apiKey()}
+                                        onInput={(e) => setApiKey(e.currentTarget.value)}
+                                        placeholder="Enter your API key..."
+                                        class="w-full px-3 py-2 rounded-md text-sm"
+                                        style={{
+                                          background: "var(--background-base)",
+                                          border: "1px solid var(--border-base)",
+                                          color: "var(--text-base)",
+                                        }}
+                                      />
+                                      <button
+                                        type="submit"
+                                        disabled={connecting() || !apiKey().trim()}
+                                        class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                                        style={{
+                                          background: "var(--interactive-base)",
+                                          color: "white",
+                                        }}
+                                      >
+                                        <Show when={connecting()} fallback="Connect">
+                                          <Spinner class="w-4 h-4" />
+                                          Connecting...
+                                        </Show>
+                                      </button>
+                                    </div>
+                                  }
+                                >
+                                  {/* OAuth method */}
+                                  <button
+                                    type="button"
+                                    disabled={connecting()}
+                                    onClick={() => handleOAuthStart(selectedProvider()!, index())}
+                                    class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                                    style={{
+                                      background: "var(--interactive-base)",
+                                      color: "white",
+                                    }}
+                                  >
+                                    <Show when={connecting()} fallback={<ExternalLink class="w-4 h-4" />}>
+                                      <Spinner class="w-4 h-4" />
+                                    </Show>
+                                    {method.label}
+                                  </button>
+                                </Show>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+
+                        <p class="text-xs" style={{ color: "var(--text-weak)" }}>
+                          Your credentials are stored securely and never shared.
                         </p>
                       </div>
+                    </Show>
 
-                      <button
-                        type="submit"
-                        disabled={connecting() || !apiKey().trim()}
-                        class="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
-                        style={{
-                          background: "var(--interactive-base)",
-                          color: "white",
-                        }}
-                      >
-                        <Show when={connecting()} fallback="Connect Provider">
-                          <Spinner class="w-4 h-4" />
-                          Connecting...
-                        </Show>
-                      </button>
+                    {/* OAuth Pending - waiting for code */}
+                    <Show when={oauthPending()}>
+                      {(pending) => (
+                        <div class="space-y-3">
+                          <div
+                            class="p-3 rounded-md text-sm"
+                            style={{
+                              background: "var(--surface-inset)",
+                              color: "var(--text-base)",
+                            }}
+                          >
+                            {pending().instructions}
+                          </div>
+
+                          <Show when={pending().method === "code"}>
+                            <input
+                              type="text"
+                              value={oauthCode()}
+                              onInput={(e) => setOauthCode(e.currentTarget.value)}
+                              placeholder="Enter the code..."
+                              class="w-full px-3 py-2 rounded-md text-sm font-mono"
+                              style={{
+                                background: "var(--background-base)",
+                                border: "1px solid var(--border-base)",
+                                color: "var(--text-base)",
+                              }}
+                            />
+                          </Show>
+
+                          <div class="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={connecting() || (pending().method === "code" && !oauthCode().trim())}
+                              onClick={handleOAuthComplete}
+                              class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                              style={{
+                                background: "var(--interactive-base)",
+                                color: "white",
+                              }}
+                            >
+                              <Show when={connecting()} fallback="Complete Authentication">
+                                <Spinner class="w-4 h-4" />
+                                Verifying...
+                              </Show>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelOAuth}
+                              class="px-4 py-2 rounded-md text-sm transition-colors"
+                              style={{
+                                background: "var(--surface-inset)",
+                                color: "var(--text-base)",
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </Show>
                   </form>
                 </div>
