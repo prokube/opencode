@@ -235,7 +235,7 @@ export function Settings() {
       window.open(result.url, "_blank")
 
       if (result.method === "code") {
-        // User needs to enter a code
+        // User needs to enter a code manually
         setOauthPending({
           providerID,
           methodIndex,
@@ -244,23 +244,29 @@ export function Settings() {
         })
         setConnecting(false)
       } else {
-        // Auto method - poll or wait for callback
+        // Auto method (device flow) - show waiting state and immediately start polling
         setOauthPending({
           providerID,
           methodIndex,
           method: "auto",
           instructions: result.instructions,
         })
-        // Try to complete the OAuth after a short delay
-        setTimeout(async () => {
-          const ok = await providers.completeOAuth(providerID, methodIndex)
-          if (ok) {
-            setSuccess(`Connected to ${getProviderDisplayName(providerID)}!`)
-            setOauthPending(null)
-            setSelectedProvider(null)
-          }
-          setConnecting(false)
-        }, 2000)
+
+        // Start the callback immediately - it will poll until user authorizes
+        // This call blocks until authorization succeeds or fails
+        console.log("[OAuth] Starting auto callback for", providerID)
+        const ok = await providers.completeOAuth(providerID, methodIndex)
+        console.log("[OAuth] Callback result:", ok)
+
+        if (ok) {
+          setSuccess(`Connected to ${getProviderDisplayName(providerID)}!`)
+          setOauthPending(null)
+          setSelectedProvider(null)
+        } else {
+          setError("Authentication failed or was cancelled. Please try again.")
+          setOauthPending(null)
+        }
+        setConnecting(false)
       }
     } else {
       setError("Failed to start authentication.")
@@ -595,7 +601,7 @@ export function Settings() {
                       </div>
                     </Show>
 
-                    {/* OAuth Pending - waiting for code */}
+                    {/* OAuth Pending - waiting for authorization */}
                     <Show when={oauthPending()}>
                       {(pending) => (
                         <div class="space-y-3">
@@ -609,6 +615,20 @@ export function Settings() {
                             {pending().instructions}
                           </div>
 
+                          {/* Auto method - just show waiting spinner */}
+                          <Show when={pending().method === "auto"}>
+                            <div class="flex items-center justify-center gap-3 py-4">
+                              <Spinner class="w-5 h-5" />
+                              <span class="text-sm" style={{ color: "var(--text-base)" }}>
+                                Waiting for authorization...
+                              </span>
+                            </div>
+                            <p class="text-xs text-center" style={{ color: "var(--text-weak)" }}>
+                              Complete the authorization in the browser window, then return here.
+                            </p>
+                          </Show>
+
+                          {/* Code method - show input and submit button */}
                           <Show when={pending().method === "code"}>
                             <input
                               type="text"
@@ -622,36 +642,35 @@ export function Settings() {
                                 color: "var(--text-base)",
                               }}
                             />
+                            <div class="flex gap-2">
+                              <button
+                                type="button"
+                                disabled={connecting() || !oauthCode().trim()}
+                                onClick={handleOAuthComplete}
+                                class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                                style={{
+                                  background: "var(--interactive-base)",
+                                  color: "white",
+                                }}
+                              >
+                                <Show when={connecting()} fallback="Complete Authentication">
+                                  <Spinner class="w-4 h-4" />
+                                  Verifying...
+                                </Show>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelOAuth}
+                                class="px-4 py-2 rounded-md text-sm transition-colors"
+                                style={{
+                                  background: "var(--surface-inset)",
+                                  color: "var(--text-base)",
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </Show>
-
-                          <div class="flex gap-2">
-                            <button
-                              type="button"
-                              disabled={connecting() || (pending().method === "code" && !oauthCode().trim())}
-                              onClick={handleOAuthComplete}
-                              class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
-                              style={{
-                                background: "var(--interactive-base)",
-                                color: "white",
-                              }}
-                            >
-                              <Show when={connecting()} fallback="Complete Authentication">
-                                <Spinner class="w-4 h-4" />
-                                Verifying...
-                              </Show>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelOAuth}
-                              class="px-4 py-2 rounded-md text-sm transition-colors"
-                              style={{
-                                background: "var(--surface-inset)",
-                                color: "var(--text-base)",
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
                         </div>
                       )}
                     </Show>
