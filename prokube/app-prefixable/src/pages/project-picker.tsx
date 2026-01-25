@@ -69,9 +69,9 @@ function ProkubeLogo(props: { class?: string }) {
   )
 }
 
-function FolderIcon(props: { class?: string }) {
+function FolderIcon(props: { class?: string; style?: { [key: string]: string } }) {
   return (
-    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg class={props.class} style={props.style} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path
         stroke-linecap="round"
         stroke-linejoin="round"

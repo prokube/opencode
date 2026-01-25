@@ -49,18 +49,14 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
   const initials = () => getInitials(name())
   const size = () => (props.size === "large" ? "w-10 h-10" : "w-8 h-8")
 
-  // Use accent color with transparency for background, stronger for selected
+  // Same background always, purple border when selected (like chat input focus state)
   return (
     <div
       class={`${size()} rounded-lg flex items-center justify-center font-medium text-sm shrink-0 transition-all`}
       style={{
-        background: props.selected
-          ? "var(--interactive-base)"
-          : "color-mix(in srgb, var(--interactive-base) 20%, transparent)",
-        color: props.selected ? "white" : "var(--interactive-base)",
-        border: props.selected
-          ? "2px solid var(--interactive-base)"
-          : "2px solid color-mix(in srgb, var(--interactive-base) 40%, transparent)",
+        background: "color-mix(in srgb, var(--interactive-base) 20%, transparent)",
+        color: "var(--interactive-base)",
+        border: props.selected ? "2px solid var(--interactive-base)" : "2px solid transparent",
       }}
     >
       {initials()}
@@ -117,6 +113,19 @@ function ChatIcon(props: { class?: string }) {
   )
 }
 
+function ArchiveIcon(props: { class?: string }) {
+  return (
+    <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+      />
+    </svg>
+  )
+}
+
 function CloseIcon(props: { class?: string }) {
   return (
     <svg class={props.class} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,6 +149,7 @@ function ChevronIcon(props: { class?: string; direction: "left" | "right" | "dow
 
 export function Layout(props: ParentProps) {
   const { client, directory } = useSDK()
+  const { basePath } = useBasePath()
   const events = useEvents()
   const providers = useProviders()
   const terminal = useTerminal()
@@ -164,11 +174,14 @@ export function Layout(props: ParentProps) {
       console.error("Failed to load projects:", e)
     }
 
-    // Load sidebar state
+    // Load sidebar state - default to open when a project is active
     try {
       const expanded = localStorage.getItem(SIDEBAR_EXPANDED_KEY)
       if (expanded !== null) {
         setSidebarExpanded(expanded === "true")
+      } else if (directory) {
+        // Default to open when viewing a project
+        setSidebarExpanded(true)
       }
     } catch (e) {
       console.error("Failed to load sidebar state:", e)
@@ -177,6 +190,9 @@ export function Layout(props: ParentProps) {
     // Add current directory to projects if not present
     if (directory) {
       addProject(directory)
+      // Ensure sidebar is open when navigating to a project
+      setSidebarExpanded(true)
+      localStorage.setItem(SIDEBAR_EXPANDED_KEY, "true")
     }
   })
 
@@ -262,7 +278,7 @@ export function Layout(props: ParentProps) {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.ctrlKey && e.key === "`") {
         e.preventDefault()
-        terminal.toggle()
+        terminal.toggle(directory)
       }
       if (e.ctrlKey && e.key === "b") {
         e.preventDefault()
@@ -290,6 +306,30 @@ export function Layout(props: ParentProps) {
     }
   }
 
+  async function archiveSession(session: Session) {
+    const currentSessions = projectSessions()
+    const index = currentSessions.findIndex((s) => s.id === session.id)
+    const nextSession = currentSessions[index + 1] ?? currentSessions[index - 1]
+
+    try {
+      await client.session.update({
+        sessionID: session.id,
+        time: { archived: Date.now() },
+      })
+      setSessions((prev) => prev.filter((s) => s.id !== session.id))
+
+      if (isActive(session.id)) {
+        if (nextSession) {
+          navigate(`/${dirSlug()}/session/${nextSession.id}`)
+        } else {
+          navigate(`/${dirSlug()}/session`)
+        }
+      }
+    } catch (e) {
+      console.error("Failed to archive session:", e)
+    }
+  }
+
   function isActive(sessionId: string) {
     return location.pathname.includes(sessionId)
   }
@@ -299,7 +339,14 @@ export function Layout(props: ParentProps) {
   }
 
   function navigateToProject(worktree: string) {
-    navigate(`/${base64Encode(worktree)}/session`)
+    // Force a full page reload when switching projects
+    // because the SDK context is tied to the directory
+    const base = basePath.endsWith("/") ? basePath.slice(0, -1) : basePath
+    window.location.href = `${base}/${base64Encode(worktree)}/session`
+  }
+
+  function navigateToHome() {
+    navigate("/")
   }
 
   return (
@@ -316,12 +363,12 @@ export function Layout(props: ParentProps) {
         class="w-16 shrink-0 flex flex-col items-center"
         style={{ background: "var(--background-base)", "border-right": "1px solid var(--border-base)" }}
       >
-        {/* Prokube Logo */}
+        {/* OpenCode Logo - navigates to home */}
         <button
-          onClick={() => setProjectDialogOpen(true)}
+          onClick={navigateToHome}
           class="w-full flex items-center justify-center py-3 transition-opacity hover:opacity-80"
           style={{ "border-bottom": "1px solid var(--border-base)" }}
-          title="Open Project"
+          title="Home"
         >
           <OpenCodeLogo class="w-8 h-10 rounded" />
         </button>
@@ -370,7 +417,7 @@ export function Layout(props: ParentProps) {
         {/* Bottom icons */}
         <div class="flex flex-col items-center gap-2 py-3" style={{ "border-top": "1px solid var(--border-base)" }}>
           <button
-            onClick={() => terminal.toggle()}
+            onClick={() => terminal.toggle(directory)}
             class="w-10 h-10 rounded-lg flex items-center justify-center transition-colors"
             style={{
               color: terminal.opened() ? "var(--text-interactive-base)" : "var(--icon-base)",
@@ -428,9 +475,11 @@ export function Layout(props: ParentProps) {
 
           {/* New Session Button */}
           <div class="p-3">
-            <Button onClick={createNewSession} variant="primary" class="w-full justify-center">
-              <PlusIcon class="w-4 h-4 mr-2" />
-              New Session
+            <Button onClick={createNewSession} variant="primary" class="w-full" size="large">
+              <div class="flex items-center justify-center gap-2 w-full">
+                <PlusIcon class="w-4 h-4" />
+                <span>New Session</span>
+              </div>
             </Button>
           </div>
 
@@ -455,25 +504,41 @@ export function Layout(props: ParentProps) {
                 <div class="space-y-0.5 pb-2">
                   <For each={projectSessions()}>
                     {(session) => (
-                      <A
-                        href={`/${dirSlug()}/session/${session.id}`}
-                        class="flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors"
-                        style={{
-                          color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
-                          background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
-                        }}
-                      >
-                        <span class="shrink-0" style={{ color: "var(--icon-weak)" }}>
-                          <ChatIcon class="w-4 h-4" />
-                        </span>
-                        <span class="truncate">{session.title || "Untitled"}</span>
-                      </A>
+                      <div class="group relative">
+                        <A
+                          href={`/${dirSlug()}/session/${session.id}`}
+                          class="flex items-center gap-2 px-2.5 py-2 pr-8 rounded-md text-sm transition-colors"
+                          style={{
+                            color: isActive(session.id) ? "var(--text-interactive-base)" : "var(--text-base)",
+                            background: isActive(session.id) ? "var(--surface-inset)" : "transparent",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActive(session.id)) e.currentTarget.style.background = "var(--surface-inset)"
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive(session.id)) e.currentTarget.style.background = "transparent"
+                          }}
+                        >
+                          <span class="shrink-0" style={{ color: "var(--icon-weak)" }}>
+                            <ChatIcon class="w-4 h-4" />
+                          </span>
+                          <span class="truncate">{session.title || "Untitled"}</span>
+                        </A>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            archiveSession(session)
+                          }}
+                          class="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded hidden group-hover:flex items-center justify-center transition-colors"
+                          style={{ color: "var(--icon-weak)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--icon-base)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--icon-weak)")}
+                          title="Archive session"
+                        >
+                          <ArchiveIcon class="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </For>
                 </div>
@@ -567,7 +632,7 @@ export function Layout(props: ParentProps) {
                   )}
                 </For>
                 <button
-                  onClick={() => terminal.create()}
+                  onClick={() => terminal.create(directory)}
                   class="p-1 rounded transition-colors"
                   style={{ color: "var(--icon-weak)" }}
                   title="New Terminal"
@@ -577,7 +642,7 @@ export function Layout(props: ParentProps) {
               </div>
 
               <button
-                onClick={() => terminal.toggle()}
+                onClick={() => terminal.toggle(directory)}
                 class="p-1 rounded transition-colors"
                 style={{ color: "var(--icon-weak)" }}
                 title="Close Terminal"

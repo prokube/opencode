@@ -11,11 +11,11 @@ interface TerminalContextValue {
   active: () => string | null
   opened: () => boolean
   height: () => number
-  create: () => Promise<string | null>
+  create: (cwd?: string) => Promise<string | null>
   close: (id: string) => Promise<void>
   setActive: (id: string | null) => void
-  toggle: () => void
-  open: () => void
+  toggle: (cwd?: string) => void
+  open: (cwd?: string) => void
   setHeight: (h: number) => void
 }
 
@@ -28,9 +28,9 @@ export function TerminalProvider(props: ParentProps) {
   const [opened, setOpened] = createSignal(false)
   const [height, setHeight] = createSignal(280)
 
-  async function create(): Promise<string | null> {
+  async function create(cwd?: string): Promise<string | null> {
     try {
-      const res = await client.pty.create({})
+      const res = await client.pty.create({ cwd })
       if (res.data) {
         const session: PTYSession = {
           id: res.data.id,
@@ -63,21 +63,21 @@ export function TerminalProvider(props: ParentProps) {
     }
   }
 
-  function toggle() {
+  function toggle(cwd?: string) {
     if (opened()) {
       setOpened(false)
     } else {
       if (sessions().length === 0) {
-        create()
+        create(cwd)
       } else {
         setOpened(true)
       }
     }
   }
 
-  function open() {
+  function open(cwd?: string) {
     if (sessions().length === 0) {
-      create()
+      create(cwd)
     } else {
       setOpened(true)
     }
