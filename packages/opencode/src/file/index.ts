@@ -412,4 +412,15 @@ export namespace File {
     log.info("search", { query, kind, results: output.length })
     return output
   }
+
+  export async function mkdir(dir: string): Promise<boolean> {
+    log.info("mkdir", { dir })
+    try {
+      await fs.promises.mkdir(dir, { recursive: true })
+      return true
+    } catch (e) {
+      log.error("mkdir failed", { dir, error: e })
+      return false
+    }
+  }
 }

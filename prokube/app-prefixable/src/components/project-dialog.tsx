@@ -20,6 +20,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
   const [searchResults, setSearchResults] = createSignal<string[]>([])
   const [searching, setSearching] = createSignal(false)
   const [newFolderName, setNewFolderName] = createSignal("")
+  const [creating, setCreating] = createSignal(false)
 
   const client = createOpencodeClient({ baseUrl: serverUrl, throwOnError: false })
 
@@ -69,12 +70,27 @@ export function ProjectDialog(props: ProjectDialogProps) {
     setNewFolderName("")
   }
 
-  function createFolder() {
+  async function createFolder() {
     const home = homeDirectory()
     const name = newFolderName().trim()
-    if (!name || !home) return
+    if (!name || !home || creating()) return
+
     const fullPath = `${home}/${name}`.replace(/\/+/g, "/")
-    selectProject(fullPath)
+
+    setCreating(true)
+    try {
+      // Actually create the directory on the server
+      const res = await client.file.mkdir({ path: fullPath })
+      if (res.data) {
+        selectProject(fullPath)
+      } else {
+        console.error("Failed to create directory:", res.error)
+      }
+    } catch (e) {
+      console.error("Failed to create directory:", e)
+    } finally {
+      setCreating(false)
+    }
   }
 
   function openFolderPath() {
@@ -216,8 +232,10 @@ export function ProjectDialog(props: ProjectDialogProps) {
                   }}
                   onKeyDown={(e) => e.key === "Enter" && createFolder()}
                 />
-                <Button onClick={createFolder} variant="primary" disabled={!newFolderName().trim()}>
-                  Create
+                <Button onClick={createFolder} variant="primary" disabled={!newFolderName().trim() || creating()}>
+                  <Show when={creating()} fallback="Create">
+                    <Spinner class="w-4 h-4" />
+                  </Show>
                 </Button>
               </div>
               <Show when={newFolderName().trim() && homeDirectory()}>

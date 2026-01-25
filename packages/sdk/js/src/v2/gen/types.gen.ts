@@ -4234,6 +4234,26 @@ export type FileStatusResponses = {
 
 export type FileStatusResponse = FileStatusResponses[keyof FileStatusResponses]
 
+export type FileMkdirData = {
+  body?: {
+    path: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/file/mkdir"
+}
+
+export type FileMkdirResponses = {
+  /**
+   * Directory created
+   */
+  200: boolean
+}
+
+export type FileMkdirResponse = FileMkdirResponses[keyof FileMkdirResponses]
+
 export type McpStatusData = {
   body?: never
   path?: never
