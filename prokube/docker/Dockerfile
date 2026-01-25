@@ -106,7 +106,8 @@ ENV HOME=/home/jovyan \
     HOME_TMP=/tmp_home/jovyan \
     OPENCODE_CONFIG_DIR=/home/jovyan/.config/opencode \
     OPENCODE_DISABLE_AUTOUPDATE=true \
-    TERM=xterm-256color
+    TERM=xterm-256color \
+    SHELL=/bin/bash
 
 # Optional: Clone kubeflow-examples on startup
 ARG KF_EXAMPLES_REPO=https://github.com/prokube-ai/kubeflow-examples.git
