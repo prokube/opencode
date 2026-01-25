@@ -146,8 +146,9 @@ export function ProviderProvider(props: ParentProps) {
         providerID,
         auth: { type: "api", key: apiKey },
       })
-      // Refresh provider list
-      refetchProviders()
+      // Dispose instance to reload provider state, then refresh
+      await client.instance.dispose()
+      await refetchProviders()
       return true
     } catch (e) {
       console.error("Failed to connect provider:", e)
@@ -175,7 +176,8 @@ export function ProviderProvider(props: ParentProps) {
         method: methodIndex,
         code,
       })
-      // Refresh provider list and wait for it to complete
+      // Dispose instance to reload provider state, then refresh
+      await client.instance.dispose()
       await refetchProviders()
       console.log("[Providers] Refetched after OAuth, connected:", providerData()?.connected)
       return true
