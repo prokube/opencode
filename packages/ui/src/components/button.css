@@ -11,12 +11,6 @@
   outline: none;
   white-space: nowrap;
 
-  /* Ensure SVG icons are properly aligned */
-  svg {
-    flex-shrink: 0;
-    display: block;
-  }
-
   &[data-variant="primary"] {
     background-color: var(--button-primary-base);
     border-color: var(--border-weak-base);
