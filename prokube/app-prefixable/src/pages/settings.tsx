@@ -342,7 +342,7 @@ export function Settings() {
                         Select Provider
                       </label>
                       <div class="grid grid-cols-2 gap-2">
-                        <For each={providers.providers.filter((p) => !providers.connected.includes(p.id)).slice(0, 8)}>
+                        <For each={providers.providers.filter((p) => !providers.connected.includes(p.id))}>
                           {(provider) => (
                             <button
                               type="button"
