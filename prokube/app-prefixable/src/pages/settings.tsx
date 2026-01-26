@@ -532,12 +532,22 @@ export function Settings() {
                                 Connected
                               </span>
                               <button
-                                onClick={() => providers.toggleProviderDisabled(providerID)}
-                                class="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:bg-red-50"
-                                style={{ color: "var(--text-weak)" }}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  console.log("[Settings] Disabling provider:", providerID)
+                                  providers.toggleProviderDisabled(providerID)
+                                }}
+                                class="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
+                                style={{
+                                  color: "var(--text-weak)",
+                                  background: "var(--background-base)",
+                                  border: "1px solid var(--border-base)",
+                                }}
                                 title="Disable this provider"
                               >
                                 <ToggleRight class="w-4 h-4" />
+                                <span>Disable</span>
                               </button>
                             </div>
                           </div>
