@@ -1273,8 +1273,7 @@ export namespace Config {
   }
 
   export async function update(config: Info) {
-    // Write to opencode.json in the project directory (same file that get() reads from)
-    const filepath = path.join(Instance.directory, "opencode.json")
+    const filepath = path.join(Instance.directory, "config.json")
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()
