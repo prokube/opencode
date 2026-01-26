@@ -109,6 +109,12 @@ function ActionCard(props: { icon: typeof Folder; title: string; description: st
 export function ProjectPicker() {
   const navigate = useNavigate()
   const [dialogOpen, setDialogOpen] = createSignal(false)
+  const [dialogView, setDialogView] = createSignal<"browse" | "clone">("browse")
+
+  function openDialog(view: "browse" | "clone") {
+    setDialogView(view)
+    setDialogOpen(true)
+  }
 
   function handleProjectSelect(worktree: string) {
     navigate(`/${base64Encode(worktree)}/session`)
@@ -147,25 +153,30 @@ export function ProjectPicker() {
             icon={Folder}
             title="Open Project"
             description="Browse and open an existing folder"
-            onClick={() => setDialogOpen(true)}
+            onClick={() => openDialog("browse")}
           />
           <ActionCard
             icon={Plus}
             title="New Project"
             description="Create a new empty folder"
-            onClick={() => setDialogOpen(true)}
+            onClick={() => openDialog("browse")}
           />
           <ActionCard
             icon={GitBranch}
             title="Clone Repository"
             description="Clone a Git repository"
-            onClick={() => setDialogOpen(true)}
+            onClick={() => openDialog("clone")}
           />
         </div>
       </div>
 
       {/* Project Dialog */}
-      <ProjectDialog open={dialogOpen()} onClose={() => setDialogOpen(false)} onSelect={handleProjectSelect} />
+      <ProjectDialog
+        open={dialogOpen()}
+        onClose={() => setDialogOpen(false)}
+        onSelect={handleProjectSelect}
+        initialView={dialogView()}
+      />
     </div>
   )
 }

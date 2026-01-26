@@ -5,10 +5,13 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Button } from "@opencode-ai/ui/button"
 import { Folder, X, GitBranch, AlertCircle } from "lucide-solid"
 
+type DialogView = "browse" | "clone"
+
 interface ProjectDialogProps {
   open: boolean
   onClose: () => void
   onSelect: (worktree: string) => void
+  initialView?: DialogView
 }
 
 export function ProjectDialog(props: ProjectDialogProps) {
@@ -50,6 +53,13 @@ export function ProjectDialog(props: ProjectDialogProps) {
     const home = homeDirectory()
     if (props.open && home && !homeFoldersLoaded()) {
       loadHomeFolders(home)
+    }
+  })
+
+  // Set initial view when dialog opens
+  createEffect(() => {
+    if (props.open) {
+      setShowCloneForm(props.initialView === "clone")
     }
   })
 
