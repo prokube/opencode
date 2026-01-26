@@ -1,6 +1,7 @@
 import { createSignal, Show, For } from "solid-js"
 import type { Part, ToolPart as SDKToolPart, ToolState } from "@opencode-ai/sdk/v2/client"
 import { ChevronDown } from "lucide-solid"
+import { ContentDiff } from "./diff/content-diff"
 
 // Use the SDK's ToolPart type
 type ToolPart = SDKToolPart
@@ -92,6 +93,54 @@ function formatInput(input: unknown): string {
   }
 }
 
+// Get language from file extension for syntax highlighting
+function getLangFromPath(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase() ?? ""
+  const langMap: Record<string, string> = {
+    ts: "typescript",
+    tsx: "tsx",
+    js: "javascript",
+    jsx: "jsx",
+    json: "json",
+    md: "markdown",
+    css: "css",
+    scss: "scss",
+    html: "html",
+    xml: "xml",
+    yaml: "yaml",
+    yml: "yaml",
+    py: "python",
+    rb: "ruby",
+    go: "go",
+    rs: "rust",
+    java: "java",
+    kt: "kotlin",
+    swift: "swift",
+    c: "c",
+    cpp: "cpp",
+    h: "c",
+    hpp: "cpp",
+    cs: "csharp",
+    php: "php",
+    sh: "bash",
+    bash: "bash",
+    zsh: "bash",
+    sql: "sql",
+    graphql: "graphql",
+    vue: "vue",
+    svelte: "svelte",
+    astro: "astro",
+  }
+  return langMap[ext] || "text"
+}
+
+// Get metadata from state
+function getMetadata(state: ToolState): Record<string, unknown> | undefined {
+  if (state.status === "completed") return state.metadata as Record<string, unknown> | undefined
+  if (state.status === "running") return state.metadata as Record<string, unknown> | undefined
+  return undefined
+}
+
 export function ToolPartDisplay(props: { part: ToolPart }) {
   const [expanded, setExpanded] = createSignal(false)
 
@@ -99,6 +148,10 @@ export function ToolPartDisplay(props: { part: ToolPart }) {
   const status = () => getStatus(state())
   const canExpand = () => hasOutput(state())
   const title = () => getTitle(state()) || props.part.tool
+  const metadata = () => getMetadata(state())
+  const isEdit = () => props.part.tool === "edit"
+  const hasDiff = () => isEdit() && metadata()?.diff
+  const filePath = () => (getInput(state()) as { filePath?: string })?.filePath || ""
 
   return (
     <div
@@ -158,8 +211,15 @@ export function ToolPartDisplay(props: { part: ToolPart }) {
         </Show>
       </button>
 
-      {/* Expanded content */}
-      <Show when={expanded() && canExpand()}>
+      {/* Diff display for edit tools - shown inline (not in expanded section) */}
+      <Show when={hasDiff()}>
+        <div class="px-3 py-2" style={{ "border-top": "1px solid var(--border-base)" }}>
+          <ContentDiff diff={metadata()?.diff as string} lang={getLangFromPath(filePath())} />
+        </div>
+      </Show>
+
+      {/* Expanded content for non-edit tools or when no diff */}
+      <Show when={expanded() && canExpand() && !hasDiff()}>
         <div
           class="px-3 py-2 text-sm font-mono overflow-x-auto"
           style={{
