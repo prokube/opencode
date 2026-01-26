@@ -93,10 +93,10 @@ export function Settings() {
   async function runPtyCommand(command: string, timeout = 5000): Promise<string> {
     console.log("[runPtyCommand] Starting with command:", command)
     try {
-      // Create an interactive shell (not running the command immediately)
+      // Create PTY with the command directly (non-interactive)
       const ptyRes = await client.pty.create({
         command: "/bin/sh",
-        args: [],
+        args: ["-c", command],
       })
 
       console.log("[runPtyCommand] PTY create response:", ptyRes)
@@ -121,13 +121,7 @@ export function Settings() {
         }, timeout)
 
         ws.addEventListener("open", () => {
-          console.log("[runPtyCommand] WebSocket connected, sending command in 200ms")
-          // Wait for shell prompt, then send command
-          setTimeout(() => {
-            const fullCommand = command + "; exit\n"
-            console.log("[runPtyCommand] Sending:", fullCommand)
-            ws.send(fullCommand)
-          }, 200)
+          console.log("[runPtyCommand] WebSocket connected, waiting for output")
         })
 
         ws.addEventListener("message", (event) => {
