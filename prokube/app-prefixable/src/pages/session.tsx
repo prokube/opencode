@@ -80,14 +80,24 @@ export function Session() {
   const [showMCPDialog, setShowMCPDialog] = createSignal(false)
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
+
+  // Model picker state
+  const [modelFilter, setModelFilter] = createSignal("")
+  const [modelIndex, setModelIndex] = createSignal(0)
+
+  // Agent picker state
+  const [agentFilter, setAgentFilter] = createSignal("")
+  const [agentIndex, setAgentIndex] = createSignal(0)
   let messagesEndRef: HTMLDivElement | undefined
   let inputRef: HTMLTextAreaElement | undefined
   let agentPickerRef: HTMLDivElement | undefined
   let modelPickerRef: HTMLDivElement | undefined
   let slashPopoverRef: HTMLDivElement | undefined
+  let modelFilterRef: HTMLInputElement | undefined
+  let agentFilterRef: HTMLInputElement | undefined
 
-  // Define slash commands directly (not through context to avoid reactivity issues)
-  const slashCommands: Command[] = [
+  // Base slash commands (static ones)
+  const baseSlashCommands: Command[] = [
     {
       id: "session.new",
       title: "New Session",
@@ -125,7 +135,11 @@ export function Session() {
       slash: "model",
       onSelect: () => {
         console.log("[Command] Model picker")
+        setModelFilter("")
+        setModelIndex(0)
         setShowModelPicker(true)
+        // Focus filter input after popup opens
+        setTimeout(() => modelFilterRef?.focus(), 50)
       },
     },
     {
@@ -135,7 +149,11 @@ export function Session() {
       slash: "agent",
       onSelect: () => {
         console.log("[Command] Agent picker")
+        setAgentFilter("")
+        setAgentIndex(0)
         setShowAgentPicker(true)
+        // Focus filter input after popup opens
+        setTimeout(() => agentFilterRef?.focus(), 50)
       },
     },
     {
@@ -153,13 +171,41 @@ export function Session() {
   // Filtered slash commands based on query
   const filteredSlashCommands = createMemo(() => {
     const q = slashQuery().toLowerCase()
-    if (!q) return slashCommands
-    return slashCommands.filter(
+    if (!q) return baseSlashCommands
+    return baseSlashCommands.filter(
       (c) =>
         c.slash?.toLowerCase().startsWith(q) ||
         c.title.toLowerCase().includes(q) ||
         c.description?.toLowerCase().includes(q),
     )
+  })
+
+  // Filtered models for model picker
+  const filteredModels = createMemo(() => {
+    const filter = modelFilter().toLowerCase()
+    const result: { provider: { id: string; name: string }; model: { id: string; name: string } }[] = []
+
+    for (const provider of providers.providers.filter((p) => providers.connected.includes(p.id))) {
+      for (const model of Object.values(provider.models).slice(0, 10)) {
+        if (
+          !filter ||
+          model.name.toLowerCase().includes(filter) ||
+          model.id.toLowerCase().includes(filter) ||
+          provider.name.toLowerCase().includes(filter) ||
+          provider.id.toLowerCase().includes(filter)
+        ) {
+          result.push({ provider: { id: provider.id, name: provider.name }, model: { id: model.id, name: model.name } })
+        }
+      }
+    }
+    return result
+  })
+
+  // Filtered agents for agent picker
+  const filteredAgents = createMemo(() => {
+    const filter = agentFilter().toLowerCase()
+    if (!filter) return providers.agents
+    return providers.agents.filter((a) => a.name.toLowerCase().includes(filter))
   })
 
   // Close dropdowns on click outside
@@ -652,7 +698,14 @@ export function Session() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  setShowAgentPicker(!showAgentPicker())
+                  if (!showAgentPicker()) {
+                    setAgentFilter("")
+                    setAgentIndex(0)
+                    setShowAgentPicker(true)
+                    setTimeout(() => agentFilterRef?.focus(), 50)
+                  } else {
+                    setShowAgentPicker(false)
+                  }
                   setShowModelPicker(false)
                 }}
                 class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
@@ -669,45 +722,95 @@ export function Session() {
 
               <Show when={showAgentPicker()}>
                 <div
-                  class="absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg z-10 overflow-hidden"
+                  class="absolute right-0 top-full mt-1 w-56 max-h-80 rounded-lg shadow-lg z-10 flex flex-col"
                   style={{
                     background: "var(--background-base)",
                     border: "1px solid var(--border-base)",
                   }}
                 >
-                  <For each={providers.agents}>
-                    {(agent) => (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          providers.setSelectedAgent(agent.name)
+                  {/* Filter input */}
+                  <div
+                    class="p-2 sticky top-0"
+                    style={{ background: "var(--background-base)", "border-bottom": "1px solid var(--border-base)" }}
+                  >
+                    <input
+                      ref={agentFilterRef}
+                      type="text"
+                      placeholder="Type to filter agents..."
+                      value={agentFilter()}
+                      onInput={(e) => {
+                        setAgentFilter(e.currentTarget.value)
+                        setAgentIndex(0)
+                      }}
+                      onKeyDown={(e) => {
+                        const agents = filteredAgents()
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault()
+                          setAgentIndex((i) => (i + 1) % agents.length)
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault()
+                          setAgentIndex((i) => (i - 1 + agents.length) % agents.length)
+                        } else if (e.key === "Enter") {
+                          e.preventDefault()
+                          const agent = agents[agentIndex()]
+                          if (agent) {
+                            providers.setSelectedAgent(agent.name)
+                            setShowAgentPicker(false)
+                          }
+                        } else if (e.key === "Escape") {
+                          e.preventDefault()
                           setShowAgentPicker(false)
-                        }}
-                        class="w-full px-3 py-2 text-left text-sm transition-colors"
-                        style={{
-                          color:
-                            providers.selectedAgent === agent.name
-                              ? "var(--text-interactive-base)"
-                              : "var(--text-base)",
-                          background: providers.selectedAgent === agent.name ? "var(--surface-inset)" : "transparent",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (providers.selectedAgent !== agent.name)
-                            e.currentTarget.style.background = "var(--surface-inset)"
-                        }}
-                        onMouseLeave={(e) => {
-                          if (providers.selectedAgent !== agent.name) e.currentTarget.style.background = "transparent"
-                        }}
-                      >
-                        <span class="capitalize">{agent.name}</span>
-                      </button>
-                    )}
-                  </For>
-                  <Show when={providers.agents.length === 0}>
-                    <div class="px-3 py-2 text-sm" style={{ color: "var(--text-weak)" }}>
-                      No agents available
-                    </div>
-                  </Show>
+                        }
+                      }}
+                      class="w-full px-3 py-2 text-sm rounded-md focus:outline-none focus:ring-2"
+                      style={
+                        {
+                          background: "var(--surface-inset)",
+                          border: "1px solid var(--border-base)",
+                          color: "var(--text-base)",
+                          "--tw-ring-color": "var(--interactive-base)",
+                        } as any
+                      }
+                    />
+                  </div>
+
+                  {/* Agent list */}
+                  <div class="overflow-y-auto flex-1">
+                    <Show when={filteredAgents().length === 0}>
+                      <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
+                        {providers.agents.length === 0 ? "No agents available" : `No agents match "${agentFilter()}"`}
+                      </div>
+                    </Show>
+
+                    <For each={filteredAgents()}>
+                      {(agent, idx) => {
+                        const selected = providers.selectedAgent === agent.name
+                        const highlighted = idx() === agentIndex()
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              providers.setSelectedAgent(agent.name)
+                              setShowAgentPicker(false)
+                            }}
+                            class="w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between"
+                            style={{
+                              color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
+                              background: highlighted ? "var(--surface-inset)" : "transparent",
+                            }}
+                            onMouseEnter={() => setAgentIndex(idx())}
+                          >
+                            <span class="capitalize">{agent.name}</span>
+                            <Show when={selected}>
+                              <div class="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--surface-inset)" }}>
+                                active
+                              </div>
+                            </Show>
+                          </button>
+                        )
+                      }}
+                    </For>
+                  </div>
                 </div>
               </Show>
             </div>
@@ -717,7 +820,14 @@ export function Session() {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  setShowModelPicker(!showModelPicker())
+                  if (!showModelPicker()) {
+                    setModelFilter("")
+                    setModelIndex(0)
+                    setShowModelPicker(true)
+                    setTimeout(() => modelFilterRef?.focus(), 50)
+                  } else {
+                    setShowModelPicker(false)
+                  }
                   setShowAgentPicker(false)
                 }}
                 class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
@@ -738,70 +848,115 @@ export function Session() {
 
               <Show when={showModelPicker()}>
                 <div
-                  class="absolute right-0 top-full mt-1 w-72 max-h-96 overflow-y-auto rounded-lg shadow-lg z-10"
+                  class="absolute right-0 top-full mt-1 w-80 max-h-96 rounded-lg shadow-lg z-10 flex flex-col"
                   style={{
                     background: "var(--background-base)",
                     border: "1px solid var(--border-base)",
                   }}
                 >
-                  <Show when={providers.connected.length === 0}>
-                    <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
-                      <p>No providers connected.</p>
-                      <a
-                        href={`/${dirSlug()}/settings`}
-                        style={{ color: "var(--text-interactive-base)" }}
-                        class="hover:underline"
-                      >
-                        Connect a provider
-                      </a>
-                    </div>
-                  </Show>
+                  {/* Filter input */}
+                  <div
+                    class="p-2 sticky top-0"
+                    style={{ background: "var(--background-base)", "border-bottom": "1px solid var(--border-base)" }}
+                  >
+                    <input
+                      ref={modelFilterRef}
+                      type="text"
+                      placeholder="Type to filter models..."
+                      value={modelFilter()}
+                      onInput={(e) => {
+                        setModelFilter(e.currentTarget.value)
+                        setModelIndex(0)
+                      }}
+                      onKeyDown={(e) => {
+                        const models = filteredModels()
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault()
+                          setModelIndex((i) => (i + 1) % models.length)
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault()
+                          setModelIndex((i) => (i - 1 + models.length) % models.length)
+                        } else if (e.key === "Enter") {
+                          e.preventDefault()
+                          const item = models[modelIndex()]
+                          if (item) {
+                            providers.setSelectedModel({ providerID: item.provider.id, modelID: item.model.id })
+                            setShowModelPicker(false)
+                          }
+                        } else if (e.key === "Escape") {
+                          e.preventDefault()
+                          setShowModelPicker(false)
+                        }
+                      }}
+                      class="w-full px-3 py-2 text-sm rounded-md focus:outline-none focus:ring-2"
+                      style={
+                        {
+                          background: "var(--surface-inset)",
+                          border: "1px solid var(--border-base)",
+                          color: "var(--text-base)",
+                          "--tw-ring-color": "var(--interactive-base)",
+                        } as any
+                      }
+                    />
+                  </div>
 
-                  <For each={providers.providers.filter((p) => providers.connected.includes(p.id))}>
-                    {(provider) => (
-                      <div>
-                        <div
-                          class="px-3 py-2 text-xs font-medium"
-                          style={{
-                            color: "var(--text-weak)",
-                            background: "var(--surface-inset)",
-                            "border-bottom": "1px solid var(--border-base)",
-                          }}
+                  {/* Model list */}
+                  <div class="overflow-y-auto flex-1">
+                    <Show when={providers.connected.length === 0}>
+                      <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
+                        <p>No providers connected.</p>
+                        <a
+                          href={`/${dirSlug()}/settings`}
+                          style={{ color: "var(--text-interactive-base)" }}
+                          class="hover:underline"
                         >
-                          {provider.name}
-                        </div>
-                        <For each={Object.values(provider.models).slice(0, 10)}>
-                          {(model) => {
-                            const selected =
-                              providers.selectedModel?.providerID === provider.id &&
-                              providers.selectedModel?.modelID === model.id
-                            return (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
-                                  setShowModelPicker(false)
-                                }}
-                                class="w-full px-3 py-2 text-left text-sm transition-colors"
-                                style={{
-                                  color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
-                                  background: selected ? "var(--surface-inset)" : "transparent",
-                                }}
-                                onMouseEnter={(e) => {
-                                  if (!selected) e.currentTarget.style.background = "var(--surface-inset)"
-                                }}
-                                onMouseLeave={(e) => {
-                                  if (!selected) e.currentTarget.style.background = "transparent"
-                                }}
-                              >
-                                {model.name}
-                              </button>
-                            )
-                          }}
-                        </For>
+                          Connect a provider
+                        </a>
                       </div>
-                    )}
-                  </For>
+                    </Show>
+
+                    <Show when={filteredModels().length === 0 && providers.connected.length > 0}>
+                      <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
+                        No models match "{modelFilter()}"
+                      </div>
+                    </Show>
+
+                    <For each={filteredModels()}>
+                      {(item, idx) => {
+                        const selected =
+                          providers.selectedModel?.providerID === item.provider.id &&
+                          providers.selectedModel?.modelID === item.model.id
+                        const highlighted = idx() === modelIndex()
+                        return (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              providers.setSelectedModel({ providerID: item.provider.id, modelID: item.model.id })
+                              setShowModelPicker(false)
+                            }}
+                            class="w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between"
+                            style={{
+                              color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
+                              background: highlighted ? "var(--surface-inset)" : "transparent",
+                            }}
+                            onMouseEnter={() => setModelIndex(idx())}
+                          >
+                            <div>
+                              <div class="font-medium">{item.model.name}</div>
+                              <div class="text-xs" style={{ color: "var(--text-weak)" }}>
+                                {item.provider.name}
+                              </div>
+                            </div>
+                            <Show when={selected}>
+                              <div class="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--surface-inset)" }}>
+                                active
+                              </div>
+                            </Show>
+                          </button>
+                        )
+                      }}
+                    </For>
+                  </div>
                 </div>
               </Show>
             </div>
@@ -954,21 +1109,25 @@ export function Session() {
             <Show when={showSlashPopover() && filteredSlashCommands().length > 0}>
               <div
                 ref={slashPopoverRef}
-                class="absolute bottom-full left-0 mb-2 w-72 rounded-lg shadow-lg z-20 overflow-hidden"
+                class="absolute bottom-full left-0 mb-2 w-72 max-h-80 overflow-y-auto rounded-lg shadow-lg z-20"
                 style={{
                   background: "var(--background-base)",
                   border: "1px solid var(--border-base)",
                 }}
               >
                 <div
-                  class="px-3 py-2 text-xs font-medium"
+                  class="px-3 py-2 text-xs font-medium sticky top-0"
                   style={{
                     color: "var(--text-weak)",
                     background: "var(--surface-inset)",
                     "border-bottom": "1px solid var(--border-base)",
                   }}
                 >
-                  Commands
+                  {slashQuery().toLowerCase().startsWith("model")
+                    ? "Models"
+                    : slashQuery().toLowerCase().startsWith("agent")
+                      ? "Agents"
+                      : "Commands"}
                 </div>
                 <For each={filteredSlashCommands()}>
                   {(cmd, idx) => (

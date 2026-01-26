@@ -1,11 +1,9 @@
-import { createSignal, For, Show, onMount } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { useNavigate } from "@solidjs/router"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "../context/base-path"
 import { base64Encode } from "../utils/path"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Button } from "@opencode-ai/ui/button"
-import { Folder } from "lucide-solid"
+import { Folder, GitBranch, Plus } from "lucide-solid"
+import { ProjectDialog } from "../components/project-dialog"
 
 // OpenCode Wordmark
 function OpenCodeWordmark(props: { class?: string }) {
@@ -70,87 +68,61 @@ function ProkubeLogo(props: { class?: string }) {
   )
 }
 
+// Action Card Component
+function ActionCard(props: { icon: typeof Folder; title: string; description: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={props.onClick}
+      class="group flex flex-col items-center p-6 rounded-xl transition-all duration-200"
+      style={{
+        background: "var(--background-base)",
+        border: "1px solid var(--border-base)",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "var(--border-strong)"
+        e.currentTarget.style.transform = "translateY(-2px)"
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "var(--border-base)"
+        e.currentTarget.style.transform = "translateY(0)"
+      }}
+    >
+      <div
+        class="w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-colors"
+        style={{ background: "var(--surface-inset)" }}
+      >
+        <props.icon class="w-6 h-6" style={{ color: "var(--icon-base)" }} />
+      </div>
+      <h3 class="text-base font-medium mb-1" style={{ color: "var(--text-strong)" }}>
+        {props.title}
+      </h3>
+      <p class="text-sm text-center" style={{ color: "var(--text-weak)" }}>
+        {props.description}
+      </p>
+    </button>
+  )
+}
+
 /**
- * Project picker content - shown inside HomeLayout.
- * Displays OpenCode logo and folder selection options.
+ * Project picker - Welcome screen with action cards.
  */
 export function ProjectPicker() {
-  const { serverUrl } = useBasePath()
   const navigate = useNavigate()
+  const [dialogOpen, setDialogOpen] = createSignal(false)
 
-  const [homeDirectory, setHomeDirectory] = createSignal<string | null>(null)
-  const [folderPath, setFolderPath] = createSignal("")
-  const [folderSearch, setFolderSearch] = createSignal("")
-  const [searchResults, setSearchResults] = createSignal<string[]>([])
-  const [searching, setSearching] = createSignal(false)
-  const [newFolderName, setNewFolderName] = createSignal("")
-
-  const client = createOpencodeClient({ baseUrl: serverUrl, throwOnError: false })
-
-  onMount(async () => {
-    try {
-      const res = await client.path.get()
-      if (res.data?.home) {
-        setHomeDirectory(res.data.home)
-      }
-    } catch (e) {
-      console.error("Failed to fetch path info:", e)
-    }
-  })
-
-  function selectProject(worktree: string) {
+  function handleProjectSelect(worktree: string) {
     navigate(`/${base64Encode(worktree)}/session`)
-  }
-
-  async function searchFolders(query: string) {
-    const home = homeDirectory()
-    if (!query.trim() || !home) {
-      setSearchResults([])
-      return
-    }
-
-    setSearching(true)
-    try {
-      const res = await client.find.files({
-        directory: home,
-        query: query,
-        type: "directory",
-        limit: 20,
-      })
-      const results = res.data ?? []
-      setSearchResults(results.map((r) => `${home}/${r}`.replace(/\/+/g, "/")))
-    } catch (e) {
-      console.error("Failed to search folders:", e)
-      setSearchResults([])
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  function createFolder() {
-    const home = homeDirectory()
-    const name = newFolderName().trim()
-    if (!name || !home) return
-    const fullPath = `${home}/${name}`.replace(/\/+/g, "/")
-    selectProject(fullPath)
-  }
-
-  function openFolderPath() {
-    const path = folderPath().trim()
-    if (path) {
-      selectProject(path)
-    }
   }
 
   return (
     <div class="flex-1 flex items-center justify-center p-6">
-      <div class="w-full max-w-md">
+      <div class="w-full max-w-2xl">
         {/* Logo and Title */}
-        <div class="text-center mb-8">
+        <div class="text-center mb-12">
           <div class="flex justify-center mb-6">
             <OpenCodeWordmark class="h-16" />
           </div>
-          <div class="flex items-center justify-center gap-2 mb-3" style={{ color: "var(--text-weak)" }}>
+          <div class="flex items-center justify-center gap-2 mb-4" style={{ color: "var(--text-weak)" }}>
             <span>Powered by</span>
             <a
               href="https://prokube.ai"
@@ -164,135 +136,36 @@ export function ProjectPicker() {
               </span>
             </a>
           </div>
-          <p style={{ color: "var(--text-weak)" }}>Choose a folder to start working</p>
+          <p class="text-lg" style={{ color: "var(--text-base)" }}>
+            Get started by choosing an option below
+          </p>
         </div>
 
-        {/* Search for folder */}
-        <div
-          class="mb-4 p-4 rounded-lg"
-          style={{ background: "var(--background-base)", border: "1px solid var(--border-base)" }}
-        >
-          <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-strong)" }}>
-            Search for a folder
-          </label>
-          <input
-            type="text"
-            value={folderSearch()}
-            onInput={(e) => {
-              setFolderSearch(e.currentTarget.value)
-              searchFolders(e.currentTarget.value)
-            }}
-            placeholder={`Type to search in ${homeDirectory() ?? "..."}...`}
-            class="w-full px-3 py-2 rounded-md text-sm"
-            style={{
-              background: "var(--background-stronger)",
-              border: "1px solid var(--border-base)",
-              color: "var(--text-base)",
-            }}
+        {/* Action Cards */}
+        <div class="grid grid-cols-3 gap-4">
+          <ActionCard
+            icon={Folder}
+            title="Open Project"
+            description="Browse and open an existing folder"
+            onClick={() => setDialogOpen(true)}
           />
-
-          <Show when={searching()}>
-            <div class="flex items-center justify-center py-4">
-              <Spinner class="w-5 h-5" style={{ color: "var(--text-interactive-base)" }} />
-            </div>
-          </Show>
-
-          <Show when={!searching() && searchResults().length > 0}>
-            <div class="mt-2 space-y-1 max-h-48 overflow-y-auto">
-              <For each={searchResults()}>
-                {(path) => (
-                  <button
-                    onClick={() => selectProject(path)}
-                    class="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-colors"
-                    style={{ color: "var(--text-base)" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <Folder class="w-4 h-4 shrink-0" style={{ color: "var(--icon-weak)" }} />
-                    <span class="truncate">{path}</span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </Show>
+          <ActionCard
+            icon={Plus}
+            title="New Project"
+            description="Create a new empty folder"
+            onClick={() => setDialogOpen(true)}
+          />
+          <ActionCard
+            icon={GitBranch}
+            title="Clone Repository"
+            description="Clone a Git repository"
+            onClick={() => setDialogOpen(true)}
+          />
         </div>
-
-        {/* Direct path input */}
-        <div
-          class="mb-4 p-4 rounded-lg"
-          style={{ background: "var(--background-base)", border: "1px solid var(--border-base)" }}
-        >
-          <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-strong)" }}>
-            Or enter path directly
-          </label>
-          <div class="flex gap-2">
-            <input
-              type="text"
-              value={folderPath()}
-              onInput={(e) => setFolderPath(e.currentTarget.value)}
-              placeholder="/home/jovyan/my-project"
-              class="flex-1 px-3 py-2 rounded-md text-sm"
-              style={{
-                background: "var(--background-stronger)",
-                border: "1px solid var(--border-base)",
-                color: "var(--text-base)",
-              }}
-              onKeyDown={(e) => e.key === "Enter" && openFolderPath()}
-            />
-            <Button onClick={openFolderPath} variant="primary" disabled={!folderPath().trim()}>
-              Open
-            </Button>
-          </div>
-        </div>
-
-        {/* Create new folder */}
-        <div
-          class="mb-4 p-4 rounded-lg"
-          style={{ background: "var(--background-base)", border: "1px solid var(--border-base)" }}
-        >
-          <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-strong)" }}>
-            Create new folder
-          </label>
-          <div class="flex gap-2">
-            <input
-              type="text"
-              value={newFolderName()}
-              onInput={(e) => setNewFolderName(e.currentTarget.value)}
-              placeholder="my-new-project"
-              class="flex-1 px-3 py-2 rounded-md text-sm"
-              style={{
-                background: "var(--background-stronger)",
-                border: "1px solid var(--border-base)",
-                color: "var(--text-base)",
-              }}
-              onKeyDown={(e) => e.key === "Enter" && createFolder()}
-            />
-            <Button onClick={createFolder} variant="primary" disabled={!newFolderName().trim() || !homeDirectory()}>
-              Create
-            </Button>
-          </div>
-          <Show when={newFolderName().trim() && homeDirectory()}>
-            <p class="mt-2 text-xs" style={{ color: "var(--text-weak)" }}>
-              Will open: {homeDirectory()}/{newFolderName()}
-            </p>
-          </Show>
-        </div>
-
-        {/* Quick access to home directory */}
-        <Show when={homeDirectory()}>
-          <div class="text-center">
-            <button
-              onClick={() => selectProject(homeDirectory()!)}
-              class="text-sm transition-colors"
-              style={{ color: "var(--text-interactive-base)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
-              onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
-            >
-              Open home directory ({homeDirectory()})
-            </button>
-          </div>
-        </Show>
       </div>
+
+      {/* Project Dialog */}
+      <ProjectDialog open={dialogOpen()} onClose={() => setDialogOpen(false)} onSelect={handleProjectSelect} />
     </div>
   )
 }
