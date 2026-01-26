@@ -213,7 +213,9 @@ export function Settings() {
         "[loadSshKeys] Loaded keys:",
         keys.map((k) => k.name),
       )
+      console.log("[loadSshKeys] Setting sshKeys signal with", keys.length, "keys")
       setSshKeys(keys)
+      console.log("[loadSshKeys] sshKeys() now has", sshKeys().length, "keys")
 
       // Select first key by default, or keep current selection if still valid
       const current = selectedKeyName()
