@@ -4,7 +4,7 @@ import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
-import { Check, Copy, Plug, GitBranch, Server, Cpu, Bot, ExternalLink, Key, Search, X } from "lucide-solid"
+import { Check, Copy, Plug, GitBranch, Server, Bot, ExternalLink, Key, Search, X } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
@@ -90,11 +90,12 @@ export function Settings() {
     }
   }
 
-  async function runPtyCommand(command: string, timeout = 3000): Promise<string> {
+  async function runPtyCommand(command: string, timeout = 5000): Promise<string> {
     try {
+      // Create an interactive shell (not running the command immediately)
       const ptyRes = await client.pty.create({
         command: "/bin/sh",
-        args: ["-c", command + "; exit"],
+        args: [],
       })
 
       if (!ptyRes.data?.id) {
@@ -103,26 +104,35 @@ export function Settings() {
       }
 
       const ptyId = ptyRes.data.id
-      // Use empty directory for SSH operations - they work in home dir
       const wsUrl = url.replace(/^http/, "ws") + `/pty/${ptyId}/connect`
       console.log("[runPtyCommand] Connecting to:", wsUrl)
 
       const output = await new Promise<string>((resolve) => {
         let data = ""
+        let commandSent = false
         const ws = new WebSocket(wsUrl)
 
-        ws.addEventListener("open", () => {
-          console.log("[runPtyCommand] WebSocket connected")
-        })
-
         const timeoutId = setTimeout(() => {
-          console.log("[runPtyCommand] Timeout, closing WebSocket")
+          console.log("[runPtyCommand] Timeout, closing WebSocket. Data so far:", data.length)
           ws.close()
           resolve(data)
         }, timeout)
 
+        ws.addEventListener("open", () => {
+          console.log("[runPtyCommand] WebSocket connected, sending command")
+          // Small delay to ensure shell is ready, then send command
+          setTimeout(() => {
+            // Send the command followed by exit
+            ws.send(command + "; exit\n")
+            commandSent = true
+          }, 100)
+        })
+
         ws.addEventListener("message", (event) => {
-          data += event.data
+          // Only collect data after we've sent the command
+          if (commandSent) {
+            data += event.data
+          }
         })
 
         ws.addEventListener("close", () => {
@@ -366,7 +376,8 @@ export function Settings() {
     { id: "providers", label: "Providers", icon: () => <Plug class="w-4 h-4" /> },
     { id: "git", label: "Git", icon: () => <GitBranch class="w-4 h-4" /> },
     { id: "mcp", label: "MCP Servers", icon: () => <Server class="w-4 h-4" /> },
-    { id: "models", label: "Models", icon: () => <Cpu class="w-4 h-4" /> },
+    // Models tab removed - model selection happens per-session, not globally
+    // { id: "models", label: "Models", icon: () => <Cpu class="w-4 h-4" /> },
     { id: "agents", label: "Agents", icon: () => <Bot class="w-4 h-4" /> },
   ]
 
@@ -440,7 +451,7 @@ export function Settings() {
                   <Show when={providers.loading}>
                     <div class="flex items-center gap-2" style={{ color: "var(--text-weak)" }}>
                       <Spinner class="w-4 h-4" />
-                      <span class="text-sm">Loading...</span>
+                      <span class="text-sm">Loading connected providers...</span>
                     </div>
                   </Show>
 
@@ -1075,7 +1086,7 @@ export function Settings() {
                 <Show when={mcp.loading()}>
                   <div class="p-6 flex items-center justify-center gap-2" style={{ color: "var(--text-weak)" }}>
                     <Spinner class="w-4 h-4" />
-                    <span class="text-sm">Loading...</span>
+                    <span class="text-sm">Loading MCP servers...</span>
                   </div>
                 </Show>
 
@@ -1225,82 +1236,6 @@ export function Settings() {
                   Learn more about MCP →
                 </a>
               </section>
-            </div>
-          </Show>
-
-          {/* Models Tab */}
-          <Show when={activeTab() === "models"}>
-            <div class="space-y-6">
-              <header>
-                <h1 class="text-lg font-medium" style={{ color: "var(--text-strong)" }}>
-                  Models
-                </h1>
-                <p class="text-sm mt-1" style={{ color: "var(--text-weak)" }}>
-                  Select a default model for new sessions
-                </p>
-              </header>
-
-              <Show when={providers.connected.length === 0}>
-                <div
-                  class="p-6 rounded-lg text-center"
-                  style={{
-                    background: "var(--background-base)",
-                    border: "1px solid var(--border-base)",
-                  }}
-                >
-                  <p class="text-sm" style={{ color: "var(--text-weak)" }}>
-                    Connect a provider to see available models.
-                  </p>
-                </div>
-              </Show>
-
-              <For each={providers.providers.filter((p) => providers.connected.includes(p.id))}>
-                {(provider) => (
-                  <section
-                    class="rounded-lg overflow-hidden"
-                    style={{
-                      background: "var(--background-base)",
-                      border: "1px solid var(--border-base)",
-                    }}
-                  >
-                    <div class="px-4 py-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
-                      <h2 class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
-                        {provider.name}
-                      </h2>
-                    </div>
-                    <div class="p-2 max-h-96 overflow-y-auto">
-                      <For each={Object.values(provider.models)}>
-                        {(model) => {
-                          const isSelected =
-                            providers.selectedModel?.providerID === provider.id &&
-                            providers.selectedModel?.modelID === model.id
-                          return (
-                            <button
-                              onClick={() => providers.setSelectedModel({ providerID: provider.id, modelID: model.id })}
-                              class="w-full px-3 py-2 rounded-md text-sm text-left transition-colors flex items-center justify-between"
-                              style={{
-                                color: isSelected ? "var(--text-interactive-base)" : "var(--text-base)",
-                                background: isSelected ? "var(--surface-inset)" : "transparent",
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isSelected) e.currentTarget.style.background = "var(--surface-inset)"
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isSelected) e.currentTarget.style.background = "transparent"
-                              }}
-                            >
-                              <span>{model.name}</span>
-                              <Show when={isSelected}>
-                                <Check class="w-4 h-4" style={{ color: "var(--text-interactive-base)" }} />
-                              </Show>
-                            </button>
-                          )
-                        }}
-                      </For>
-                    </div>
-                  </section>
-                )}
-              </For>
             </div>
           </Show>
 

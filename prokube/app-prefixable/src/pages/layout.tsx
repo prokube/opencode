@@ -437,8 +437,9 @@ export function Layout(props: ParentProps) {
           {/* Sessions List */}
           <div class="flex-1 overflow-y-auto px-2">
             <Show when={loading()}>
-              <div class="flex items-center justify-center py-8">
+              <div class="flex flex-col items-center justify-center py-8 gap-2" style={{ color: "var(--text-weak)" }}>
                 <Spinner class="w-5 h-5" style={{ color: "var(--text-interactive-base)" }} />
+                <span class="text-sm">Loading sessions...</span>
               </div>
             </Show>
 
