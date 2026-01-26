@@ -157,18 +157,29 @@ export function Settings() {
     }
   }
 
+  // Strip ANSI escape codes from terminal output
+  function stripAnsi(str: string): string {
+    // eslint-disable-next-line no-control-regex
+    return str.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]/g, "")
+  }
+
   async function loadSshKeys() {
     setSshKeyLoading(true)
     setSshKeyError(null)
+    console.log("[loadSshKeys] Starting")
     try {
       // List all .pub files in ~/.ssh/
       const listOutput = await runPtyCommand("ls -1 ~/.ssh/*.pub 2>/dev/null")
+      const cleanOutput = stripAnsi(listOutput)
+      console.log("[loadSshKeys] Clean output:", cleanOutput)
 
       // Parse file names
-      const files = listOutput
+      const files = cleanOutput
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line.endsWith(".pub") && !line.includes("*"))
+
+      console.log("[loadSshKeys] Found files:", files)
 
       if (files.length === 0) {
         setSshKeys([])
@@ -180,13 +191,16 @@ export function Settings() {
       const keys: Array<{ name: string; content: string }> = []
       for (const file of files) {
         const content = await runPtyCommand(`cat "${file}" 2>/dev/null`)
-        const keyContent = content
+        const cleanContent = stripAnsi(content)
+        const keyContent = cleanContent
           .split("\n")
           .find((line) => {
             const trimmed = line.trim()
             return trimmed.startsWith("ssh-") || trimmed.startsWith("ecdsa-")
           })
           ?.trim()
+
+        console.log("[loadSshKeys] Key content for", file, ":", keyContent?.substring(0, 50))
 
         if (keyContent) {
           // Extract just the filename without path
@@ -195,6 +209,10 @@ export function Settings() {
         }
       }
 
+      console.log(
+        "[loadSshKeys] Loaded keys:",
+        keys.map((k) => k.name),
+      )
       setSshKeys(keys)
 
       // Select first key by default, or keep current selection if still valid
@@ -203,7 +221,7 @@ export function Settings() {
         setSelectedKeyName(keys[0]?.name ?? null)
       }
     } catch (e) {
-      console.error("Failed to load SSH keys:", e)
+      console.error("[loadSshKeys] Failed to load SSH keys:", e)
       setSshKeyError("Failed to check for SSH keys")
     } finally {
       setSshKeyLoading(false)
