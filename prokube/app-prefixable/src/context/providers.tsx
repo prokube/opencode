@@ -212,20 +212,28 @@ export function ProviderProvider(props: ParentProps) {
   }
 
   async function toggleProviderDisabled(providerID: string): Promise<boolean> {
+    console.log("[Providers] toggleProviderDisabled called for:", providerID)
     try {
       const current = configData()?.disabled_providers ?? []
+      console.log("[Providers] Current disabled_providers:", current)
       const isDisabled = current.includes(providerID)
       const updated = isDisabled ? current.filter((id) => id !== providerID) : [...current, providerID]
+      console.log("[Providers] Will update to:", updated)
 
-      await client.config.update({ config: { disabled_providers: updated } })
+      console.log("[Providers] Calling config.update...")
+      const result = await client.config.update({ config: { disabled_providers: updated } })
+      console.log("[Providers] config.update result:", result)
 
       // Dispose instance to reload provider state, then refresh
+      console.log("[Providers] Disposing instance...")
       await client.instance.dispose()
+      console.log("[Providers] Refetching config and providers...")
       await refetchConfig()
       await refetchProviders()
+      console.log("[Providers] Done, new disabled_providers:", configData()?.disabled_providers)
       return true
     } catch (e) {
-      console.error("Failed to toggle provider:", e)
+      console.error("[Providers] Failed to toggle provider:", e)
       return false
     }
   }
