@@ -91,12 +91,15 @@ export function Settings() {
   }
 
   async function runPtyCommand(command: string, timeout = 5000): Promise<string> {
+    console.log("[runPtyCommand] Starting with command:", command)
     try {
       // Create an interactive shell (not running the command immediately)
       const ptyRes = await client.pty.create({
         command: "/bin/sh",
         args: [],
       })
+
+      console.log("[runPtyCommand] PTY create response:", ptyRes)
 
       if (!ptyRes.data?.id) {
         console.error("[runPtyCommand] Failed to create PTY:", ptyRes)
@@ -109,34 +112,31 @@ export function Settings() {
 
       const output = await new Promise<string>((resolve) => {
         let data = ""
-        let commandSent = false
         const ws = new WebSocket(wsUrl)
 
         const timeoutId = setTimeout(() => {
-          console.log("[runPtyCommand] Timeout, closing WebSocket. Data so far:", data.length)
+          console.log("[runPtyCommand] Timeout reached. Data collected:", data)
           ws.close()
           resolve(data)
         }, timeout)
 
         ws.addEventListener("open", () => {
-          console.log("[runPtyCommand] WebSocket connected, sending command")
-          // Small delay to ensure shell is ready, then send command
+          console.log("[runPtyCommand] WebSocket connected, sending command in 200ms")
+          // Wait for shell prompt, then send command
           setTimeout(() => {
-            // Send the command followed by exit
-            ws.send(command + "; exit\n")
-            commandSent = true
-          }, 100)
+            const fullCommand = command + "; exit\n"
+            console.log("[runPtyCommand] Sending:", fullCommand)
+            ws.send(fullCommand)
+          }, 200)
         })
 
         ws.addEventListener("message", (event) => {
-          // Only collect data after we've sent the command
-          if (commandSent) {
-            data += event.data
-          }
+          console.log("[runPtyCommand] Received message:", event.data)
+          data += event.data
         })
 
         ws.addEventListener("close", () => {
-          console.log("[runPtyCommand] WebSocket closed, output length:", data.length)
+          console.log("[runPtyCommand] WebSocket closed, total output length:", data.length)
           clearTimeout(timeoutId)
           resolve(data)
         })
@@ -148,6 +148,7 @@ export function Settings() {
         })
       })
 
+      console.log("[runPtyCommand] Final output:", output)
       await client.pty.remove({ ptyID: ptyId }).catch(() => {})
       return output
     } catch (e) {
@@ -212,16 +213,38 @@ export function Settings() {
   async function generateSshKey() {
     setSshKeyGenerating(true)
     setSshKeyError(null)
+    console.log("[generateSshKey] Starting SSH key generation")
     try {
-      // Generate new ed25519 key
-      await runPtyCommand('mkdir -p ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -q 2>/dev/null', 10000)
+      // Find a unique key name if id_ed25519 already exists
+      const existingKeys = sshKeys().map((k) => k.name)
+      let keyName = "id_ed25519"
+      let counter = 2
+      while (existingKeys.includes(keyName)) {
+        keyName = `id_ed25519_${counter}`
+        counter++
+      }
+      console.log("[generateSshKey] Using key name:", keyName)
 
+      // Generate new ed25519 key with unique name
+      const cmd = `mkdir -p ~/.ssh && chmod 700 ~/.ssh && ssh-keygen -t ed25519 -f ~/.ssh/${keyName} -N "" -q && echo "KEY_GENERATED"`
+      console.log("[generateSshKey] Running command:", cmd)
+      const result = await runPtyCommand(cmd, 10000)
+      console.log("[generateSshKey] Command result:", result)
+
+      if (!result.includes("KEY_GENERATED")) {
+        console.error("[generateSshKey] SSH key generation failed, output:", result)
+        setSshKeyError("SSH key generation failed. Check browser console for details.")
+        return
+      }
+
+      console.log("[generateSshKey] Key generated successfully, reloading keys")
       // Reload all keys and select the new one
       await loadSshKeys()
-      setSelectedKeyName("id_ed25519")
+      setSelectedKeyName(keyName)
+      console.log("[generateSshKey] Done")
     } catch (e) {
-      console.error("Failed to generate SSH key:", e)
-      setSshKeyError("Failed to generate SSH key")
+      console.error("[generateSshKey] Error:", e)
+      setSshKeyError("Failed to generate SSH key: " + String(e))
     } finally {
       setSshKeyGenerating(false)
     }
