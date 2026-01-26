@@ -75,8 +75,13 @@ RUN addgroup -g 1000 jovyan && \
 RUN mkdir -p /home/jovyan/.config/opencode \
              /home/jovyan/.local/share/opencode \
              /opt/opencode-ui \
-             /tmp_home && \
-    cp -r /home/jovyan /tmp_home/
+             /tmp_home
+
+# Copy default OpenCode config (disables amazon-bedrock to avoid S3/MinIO credential confusion)
+COPY prokube/docker/opencode-default-config.json /home/jovyan/.config/opencode/opencode.json
+
+# Copy home template for container init
+RUN cp -r /home/jovyan /tmp_home/
 
 # Copy built UI from builder stage
 COPY --from=builder /opencode/prokube/app-prefixable/dist /opt/opencode-ui/dist

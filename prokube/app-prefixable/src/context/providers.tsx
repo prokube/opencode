@@ -48,11 +48,6 @@ interface OAuthAuthorization {
   instructions: string
 }
 
-interface ConfigData {
-  disabled_providers?: string[]
-  [key: string]: unknown
-}
-
 interface ProviderContextValue {
   providers: Provider[]
   connected: string[]
@@ -62,14 +57,12 @@ interface ProviderContextValue {
   loading: boolean
   selectedModel: ModelKey | null
   selectedAgent: string
-  disabledProviders: string[]
   setSelectedModel: (model: ModelKey | null) => void
   setSelectedAgent: (agent: string) => void
   refetch: () => void
   connectProvider: (providerID: string, apiKey: string) => Promise<boolean>
   startOAuth: (providerID: string, methodIndex: number) => Promise<OAuthAuthorization | undefined>
   completeOAuth: (providerID: string, methodIndex: number, code?: string) => Promise<boolean>
-  toggleProviderDisabled: (providerID: string) => Promise<boolean>
 }
 
 const ProviderContext = createContext<ProviderContextValue>()
@@ -89,17 +82,6 @@ export function ProviderProvider(props: ParentProps) {
       return res.data as ProviderListData | undefined
     } catch (e) {
       console.error("Failed to fetch providers:", e)
-      return undefined
-    }
-  })
-
-  // Fetch config for disabled_providers
-  const [configData, { refetch: refetchConfig }] = createResource(async () => {
-    try {
-      const res = await client.config.get()
-      return res.data as ConfigData | undefined
-    } catch (e) {
-      console.error("Failed to fetch config:", e)
       return undefined
     }
   })
@@ -208,34 +190,6 @@ export function ProviderProvider(props: ParentProps) {
   function refetch() {
     refetchProviders()
     refetchAgents()
-    refetchConfig()
-  }
-
-  async function toggleProviderDisabled(providerID: string): Promise<boolean> {
-    console.log("[Providers] toggleProviderDisabled called for:", providerID)
-    try {
-      const current = configData()?.disabled_providers ?? []
-      console.log("[Providers] Current disabled_providers:", current)
-      const isDisabled = current.includes(providerID)
-      const updated = isDisabled ? current.filter((id) => id !== providerID) : [...current, providerID]
-      console.log("[Providers] Will update to:", updated)
-
-      console.log("[Providers] Calling config.update...")
-      const result = await client.config.update({ config: { disabled_providers: updated } })
-      console.log("[Providers] config.update result:", result)
-
-      // Dispose instance to reload provider state, then refresh
-      console.log("[Providers] Disposing instance...")
-      await client.instance.dispose()
-      console.log("[Providers] Refetching config and providers...")
-      await refetchConfig()
-      await refetchProviders()
-      console.log("[Providers] Done, new disabled_providers:", configData()?.disabled_providers)
-      return true
-    } catch (e) {
-      console.error("[Providers] Failed to toggle provider:", e)
-      return false
-    }
   }
 
   const value: ProviderContextValue = {
@@ -265,16 +219,12 @@ export function ProviderProvider(props: ParentProps) {
     get selectedAgent() {
       return store.selectedAgent
     },
-    get disabledProviders() {
-      return configData()?.disabled_providers ?? []
-    },
     setSelectedModel,
     setSelectedAgent,
     refetch,
     connectProvider,
     startOAuth,
     completeOAuth,
-    toggleProviderDisabled,
   }
 
   return <ProviderContext.Provider value={value}>{props.children}</ProviderContext.Provider>

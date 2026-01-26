@@ -4,20 +4,7 @@ import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
-import {
-  Check,
-  Copy,
-  Plug,
-  GitBranch,
-  Server,
-  Bot,
-  ExternalLink,
-  Key,
-  Search,
-  X,
-  ToggleLeft,
-  ToggleRight,
-} from "lucide-solid"
+import { Check, Copy, Plug, GitBranch, Server, Bot, ExternalLink, Key, Search, X } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
@@ -527,29 +514,9 @@ export function Settings() {
                                 {getProviderDisplayName(providerID)}
                               </span>
                             </div>
-                            <div class="flex items-center gap-2">
-                              <span class="text-xs" style={{ color: "var(--text-weak)" }}>
-                                Connected
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  console.log("[Settings] Disabling provider:", providerID)
-                                  providers.toggleProviderDisabled(providerID)
-                                }}
-                                class="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors"
-                                style={{
-                                  color: "var(--text-weak)",
-                                  background: "var(--background-base)",
-                                  border: "1px solid var(--border-base)",
-                                }}
-                                title="Disable this provider"
-                              >
-                                <ToggleRight class="w-4 h-4" />
-                                <span>Disable</span>
-                              </button>
-                            </div>
+                            <span class="text-xs" style={{ color: "var(--text-weak)" }}>
+                              Connected
+                            </span>
                           </div>
                         )}
                       </For>
@@ -557,56 +524,6 @@ export function Settings() {
                   </Show>
                 </div>
               </section>
-
-              {/* Disabled Providers */}
-              <Show when={providers.disabledProviders.length > 0}>
-                <section
-                  class="rounded-lg overflow-hidden"
-                  style={{
-                    background: "var(--background-base)",
-                    border: "1px solid var(--border-base)",
-                  }}
-                >
-                  <div class="px-4 py-3" style={{ "border-bottom": "1px solid var(--border-base)" }}>
-                    <h2 class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
-                      Disabled Providers
-                    </h2>
-                    <p class="text-xs mt-1" style={{ color: "var(--text-weak)" }}>
-                      These providers are disabled and won't be auto-detected
-                    </p>
-                  </div>
-                  <div class="p-4">
-                    <div class="space-y-2">
-                      <For each={providers.disabledProviders}>
-                        {(providerID) => (
-                          <div
-                            class="flex items-center justify-between p-3 rounded-md"
-                            style={{ background: "var(--surface-inset)" }}
-                          >
-                            <div class="flex items-center gap-3">
-                              <div class="w-6 h-6 bg-gray-100 rounded flex items-center justify-center">
-                                <X class="w-3 h-3 text-gray-500" />
-                              </div>
-                              <span class="text-sm font-medium" style={{ color: "var(--text-base)" }}>
-                                {getProviderDisplayName(providerID)}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() => providers.toggleProviderDisabled(providerID)}
-                              class="flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors hover:bg-green-50"
-                              style={{ color: "var(--text-weak)" }}
-                              title="Enable this provider"
-                            >
-                              <ToggleLeft class="w-4 h-4" />
-                              <span>Enable</span>
-                            </button>
-                          </div>
-                        )}
-                      </For>
-                    </div>
-                  </div>
-                </section>
-              </Show>
 
               {/* Add Provider */}
               <section
