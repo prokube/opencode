@@ -4,12 +4,12 @@ import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
-import { Check, Copy, Plug, GitBranch, Server, Bot, ExternalLink, Key, Search, X } from "lucide-solid"
+import { Check, Copy, Plug, GitBranch, Server, Bot, ExternalLink, Key, Search, X, Plus, Trash2 } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
   const mcp = useMCP()
-  const { client, url, directory } = useSDK()
+  const { client, global, url, directory } = useSDK()
   const [selectedProvider, setSelectedProvider] = createSignal<string | null>(null)
   const [apiKey, setApiKey] = createSignal("")
   const [connecting, setConnecting] = createSignal(false)
@@ -42,6 +42,18 @@ export function Settings() {
   const [sshKeyError, setSshKeyError] = createSignal<string | null>(null)
   const [sshKeyCopied, setSshKeyCopied] = createSignal(false)
   const [sshKeyLoaded, setSshKeyLoaded] = createSignal(false)
+
+  // SSH Key Import/Add state
+  const [showAddKeyDialog, setShowAddKeyDialog] = createSignal(false)
+  const [addKeyContent, setAddKeyContent] = createSignal("")
+  const [addKeyPrivateContent, setAddKeyPrivateContent] = createSignal("")
+  const [addKeyName, setAddKeyName] = createSignal("")
+  const [addKeyError, setAddKeyError] = createSignal<string | null>(null)
+  const [addKeyAdding, setAddKeyAdding] = createSignal(false)
+
+  // SSH Key Remove state
+  const [keyToRemove, setKeyToRemove] = createSignal<string | null>(null)
+  const [removeKeyLoading, setRemoveKeyLoading] = createSignal(false)
 
   // Get auth methods for selected provider
   const selectedProviderAuthMethods = createMemo(() => {
@@ -93,10 +105,21 @@ export function Settings() {
   async function runPtyCommand(command: string, timeout = 5000): Promise<string> {
     console.log("[runPtyCommand] Starting with command:", command)
     try {
-      // Create an interactive shell PTY first
-      const ptyRes = await client.pty.create({
-        command: "/bin/sh",
-        args: [],
+      // Create PTY that directly runs the command via sh -c
+      // Add a sleep at the end to give us time to connect and read the output
+      // The sleep keeps the process alive until we've read all data
+      // cd to $HOME first to ensure we're in a valid directory for SSH operations
+      const marker = `__DONE_${Date.now()}__`
+      const fullCommand = `cd ~ && ${command}; echo "${marker}"; sleep 2`
+
+      // Use global client (no directory header) to avoid project context issues
+      // Use /usr/bin/env sh instead of /bin/sh to avoid the PTY code
+      // appending -l flag which breaks -c execution
+      // Use /tmp as cwd - it always exists and is writable
+      const ptyRes = await global.pty.create({
+        command: "/usr/bin/env",
+        args: ["sh", "-c", fullCommand],
+        cwd: "/tmp",
       })
 
       console.log("[runPtyCommand] PTY create response:", ptyRes)
@@ -121,16 +144,20 @@ export function Settings() {
         }, timeout)
 
         ws.addEventListener("open", () => {
-          console.log("[runPtyCommand] WebSocket connected, sending command")
-          // Send the command followed by exit
-          // Use a unique marker to identify when command is done
-          const marker = `__DONE_${Date.now()}__`
-          ws.send(`${command}; echo "${marker}"; exit\n`)
+          console.log("[runPtyCommand] WebSocket connected")
         })
 
         ws.addEventListener("message", (event) => {
           console.log("[runPtyCommand] Received message:", event.data)
           data += event.data
+
+          // Check if we got the completion marker
+          if (data.includes(marker)) {
+            console.log("[runPtyCommand] Marker found, closing")
+            clearTimeout(timeoutId)
+            ws.close()
+            resolve(data)
+          }
         })
 
         ws.addEventListener("close", () => {
@@ -147,7 +174,7 @@ export function Settings() {
       })
 
       console.log("[runPtyCommand] Final output:", output)
-      await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+      await global.pty.remove({ ptyID: ptyId }).catch(() => {})
       return output
     } catch (e) {
       console.error("[runPtyCommand] Error:", e)
@@ -277,6 +304,268 @@ export function Settings() {
       setTimeout(() => setSshKeyCopied(false), 2000)
     } catch (e) {
       console.error("Failed to copy:", e)
+    }
+  }
+
+  // Validate SSH public key and extract key name from comment
+  function validateSshPublicKey(content: string): { valid: boolean; error?: string; suggestedName?: string } {
+    const trimmed = content.trim()
+
+    // Check if empty
+    if (!trimmed) {
+      return { valid: false, error: "Key content is empty" }
+    }
+
+    // Valid SSH key types
+    const validTypes = [
+      "ssh-rsa",
+      "ssh-ed25519",
+      "ecdsa-sha2-nistp256",
+      "ecdsa-sha2-nistp384",
+      "ecdsa-sha2-nistp521",
+      "ssh-dss",
+    ]
+
+    // Remove any newlines (keys should be single line but users might paste with newlines)
+    const singleLine = trimmed.replace(/\n/g, " ").replace(/\s+/g, " ")
+
+    // Split into parts: <type> <base64-key> [comment]
+    const parts = singleLine.split(" ")
+
+    if (parts.length < 2) {
+      return { valid: false, error: "Invalid SSH key format. Expected: <type> <key-data> [comment]" }
+    }
+
+    const keyType = parts[0]
+
+    // Check if valid key type
+    if (!validTypes.includes(keyType)) {
+      return {
+        valid: false,
+        error: `Invalid SSH key type '${keyType}'. Supported types: ${validTypes.join(", ")}`,
+      }
+    }
+
+    // Base64 validation (simplified - just check if it looks like base64)
+    const keyData = parts[1]
+    if (!/^[A-Za-z0-9+/]+=*$/.test(keyData)) {
+      return { valid: false, error: "Invalid key data format" }
+    }
+
+    // Extract suggested name from comment (if present)
+    let suggestedName = ""
+    if (parts.length > 2) {
+      // Comment is everything after type and key data
+      const comment = parts.slice(2).join(" ")
+      // Try to extract a reasonable name from the comment
+      // e.g., "user@host" -> "user_host", "my key" -> "my_key"
+      suggestedName = comment
+        .replace(/@/g, "_at_")
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .substring(0, 50) // Limit length
+    }
+
+    // Fallback to key type if no comment
+    if (!suggestedName) {
+      suggestedName = keyType.replace("ssh-", "").replace(/-/g, "_") + "_key"
+    }
+
+    return { valid: true, suggestedName }
+  }
+
+  // Validate SSH private key format
+  function validateSshPrivateKey(content: string): { valid: boolean; error?: string } {
+    const trimmed = content.trim()
+
+    if (!trimmed) {
+      return { valid: false, error: "Private key is empty" }
+    }
+
+    // Check for valid private key headers
+    const validHeaders = [
+      "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "-----BEGIN RSA PRIVATE KEY-----",
+      "-----BEGIN EC PRIVATE KEY-----",
+      "-----BEGIN DSA PRIVATE KEY-----",
+      "-----BEGIN PRIVATE KEY-----",
+    ]
+
+    const hasValidHeader = validHeaders.some((header) => trimmed.includes(header))
+    if (!hasValidHeader) {
+      return { valid: false, error: "Invalid private key format. Must start with a valid PEM header." }
+    }
+
+    // Check for matching footer
+    const validFooters = [
+      "-----END OPENSSH PRIVATE KEY-----",
+      "-----END RSA PRIVATE KEY-----",
+      "-----END EC PRIVATE KEY-----",
+      "-----END DSA PRIVATE KEY-----",
+      "-----END PRIVATE KEY-----",
+    ]
+
+    const hasValidFooter = validFooters.some((footer) => trimmed.includes(footer))
+    if (!hasValidFooter) {
+      return { valid: false, error: "Invalid private key format. Missing valid PEM footer." }
+    }
+
+    return { valid: true }
+  }
+
+  function openAddKeyDialog() {
+    setAddKeyContent("")
+    setAddKeyPrivateContent("")
+    setAddKeyName("")
+    setAddKeyError(null)
+    setShowAddKeyDialog(true)
+  }
+
+  function closeAddKeyDialog() {
+    setShowAddKeyDialog(false)
+    setAddKeyContent("")
+    setAddKeyPrivateContent("")
+    setAddKeyName("")
+    setAddKeyError(null)
+  }
+
+  // Validate and auto-detect name when content changes
+  function handleAddKeyContentChange(content: string) {
+    setAddKeyContent(content)
+    setAddKeyError(null)
+
+    if (!content.trim()) {
+      setAddKeyName("")
+      return
+    }
+
+    const result = validateSshPublicKey(content)
+    if (result.valid && result.suggestedName) {
+      setAddKeyName(result.suggestedName)
+    } else if (!result.valid) {
+      setAddKeyError(result.error || "Invalid SSH key")
+    }
+  }
+
+  async function addExistingSshKey() {
+    const publicContent = addKeyContent().trim()
+    const privateContent = addKeyPrivateContent().trim()
+    const keyName = addKeyName().trim()
+
+    // Validate public key
+    const publicValidation = validateSshPublicKey(publicContent)
+    if (!publicValidation.valid) {
+      setAddKeyError(publicValidation.error || "Invalid SSH public key")
+      return
+    }
+
+    // Validate private key if provided
+    if (privateContent) {
+      const privateValidation = validateSshPrivateKey(privateContent)
+      if (!privateValidation.valid) {
+        setAddKeyError(privateValidation.error || "Invalid SSH private key")
+        return
+      }
+    }
+
+    if (!keyName) {
+      setAddKeyError("Please provide a name for the key")
+      return
+    }
+
+    // Check if key with this name already exists
+    const existingKeys = sshKeys().map((k) => k.name)
+    if (existingKeys.includes(keyName)) {
+      setAddKeyError(`A key named '${keyName}' already exists. Please choose a different name.`)
+      return
+    }
+
+    setAddKeyAdding(true)
+    setAddKeyError(null)
+
+    try {
+      // Create .ssh directory first
+      await runPtyCommand("mkdir -p ~/.ssh && chmod 700 ~/.ssh", 5000)
+
+      // Save public key - use base64 encoding to avoid shell escaping issues
+      const base64PublicContent = btoa(publicContent)
+      const publicCmd = `echo "${base64PublicContent}" | base64 -d > ~/.ssh/${keyName}.pub && chmod 644 ~/.ssh/${keyName}.pub && echo "PUBLIC_KEY_ADDED"`
+
+      console.log("[addExistingSshKey] Adding public key:", keyName)
+      const publicResult = await runPtyCommand(publicCmd, 10000)
+
+      if (!publicResult.includes("PUBLIC_KEY_ADDED")) {
+        console.error("[addExistingSshKey] Failed to add public key, output:", publicResult)
+        setAddKeyError("Failed to save SSH public key. Check browser console for details.")
+        return
+      }
+
+      // Save private key if provided
+      if (privateContent) {
+        const base64PrivateContent = btoa(privateContent)
+        const privateCmd = `echo "${base64PrivateContent}" | base64 -d > ~/.ssh/${keyName} && chmod 600 ~/.ssh/${keyName} && echo "PRIVATE_KEY_ADDED"`
+
+        console.log("[addExistingSshKey] Adding private key:", keyName)
+        const privateResult = await runPtyCommand(privateCmd, 10000)
+
+        if (!privateResult.includes("PRIVATE_KEY_ADDED")) {
+          console.error("[addExistingSshKey] Failed to add private key, output:", privateResult)
+          // Clean up public key on failure
+          await runPtyCommand(`rm -f ~/.ssh/${keyName}.pub`, 5000)
+          setAddKeyError("Failed to save SSH private key. Check browser console for details.")
+          return
+        }
+      }
+
+      console.log("[addExistingSshKey] Key(s) added successfully, reloading keys")
+      // Reload all keys and select the new one
+      await loadSshKeys()
+      setSelectedKeyName(keyName)
+
+      // Close dialog
+      closeAddKeyDialog()
+      console.log("[addExistingSshKey] Done")
+    } catch (e) {
+      console.error("[addExistingSshKey] Error:", e)
+      setAddKeyError("Failed to add SSH key: " + String(e))
+    } finally {
+      setAddKeyAdding(false)
+    }
+  }
+
+  async function removeSshKey(keyName: string) {
+    setRemoveKeyLoading(true)
+    setSshKeyError(null)
+
+    try {
+      const cmd = `rm -f ~/.ssh/${keyName}.pub ~/.ssh/${keyName} && echo "KEY_REMOVED"`
+      console.log("[removeSshKey] Removing key:", keyName)
+      const result = await runPtyCommand(cmd, 10000)
+
+      if (!result.includes("KEY_REMOVED")) {
+        console.error("[removeSshKey] Failed to remove key, output:", result)
+        setSshKeyError("Failed to remove SSH key")
+        return
+      }
+
+      console.log("[removeSshKey] Key removed successfully, reloading keys")
+      // Reload keys
+      await loadSshKeys()
+
+      // Clear selection if removed key was selected
+      if (selectedKeyName() === keyName) {
+        setSelectedKeyName(sshKeys()[0]?.name ?? null)
+      }
+
+      // Close confirmation dialog
+      setKeyToRemove(null)
+      console.log("[removeSshKey] Done")
+    } catch (e) {
+      console.error("[removeSshKey] Error:", e)
+      setSshKeyError("Failed to remove SSH key: " + String(e))
+    } finally {
+      setRemoveKeyLoading(false)
     }
   }
 
@@ -999,7 +1288,7 @@ export function Settings() {
                         </div>
                       </Show>
 
-                      <div class="flex gap-2">
+                      <div class="flex gap-2 flex-wrap">
                         <button
                           onClick={loadSshKeys}
                           class="px-3 py-1.5 rounded text-sm transition-colors"
@@ -1009,6 +1298,17 @@ export function Settings() {
                           }}
                         >
                           Refresh
+                        </button>
+                        <button
+                          onClick={openAddKeyDialog}
+                          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors"
+                          style={{
+                            background: "var(--surface-inset)",
+                            color: "var(--text-base)",
+                          }}
+                        >
+                          <Plus class="w-3.5 h-3.5" />
+                          Add Existing Key
                         </button>
                         <button
                           onClick={generateSshKey}
@@ -1023,11 +1323,233 @@ export function Settings() {
                             <Spinner class="w-3 h-3" />
                           </Show>
                         </button>
+                        <Show when={selectedKeyName()}>
+                          <button
+                            onClick={() => setKeyToRemove(selectedKeyName())}
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ml-auto text-red-600 hover:text-red-700"
+                            style={{
+                              background: "var(--surface-inset)",
+                            }}
+                          >
+                            <Trash2 class="w-3.5 h-3.5" />
+                            Remove
+                          </button>
+                        </Show>
                       </div>
                     </div>
                   </Show>
                 </div>
               </section>
+
+              {/* Add Existing Key Dialog */}
+              <Show when={showAddKeyDialog()}>
+                <div
+                  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  style={{ background: "rgba(0, 0, 0, 0.5)" }}
+                  onClick={closeAddKeyDialog}
+                >
+                  <div
+                    class="rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+                    style={{
+                      background: "var(--background-base)",
+                      border: "1px solid var(--border-base)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div class="flex items-center justify-between mb-4">
+                      <h3 class="text-lg font-semibold" style={{ color: "var(--text-strong)" }}>
+                        Add Existing SSH Key
+                      </h3>
+                      <button
+                        onClick={closeAddKeyDialog}
+                        class="p-1 rounded transition-colors"
+                        style={{ color: "var(--text-weak)" }}
+                      >
+                        <X class="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div class="space-y-4">
+                      {/* Key Content Textarea */}
+                      <div>
+                        <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
+                          Public Key Content
+                        </label>
+                        <textarea
+                          value={addKeyContent()}
+                          onInput={(e) => handleAddKeyContentChange(e.currentTarget.value)}
+                          placeholder="Paste your SSH public key here (e.g., ssh-ed25519 AAAA... user@host)"
+                          rows={5}
+                          class="w-full px-3 py-2 rounded-md text-sm font-mono"
+                          style={{
+                            background: "var(--surface-inset)",
+                            border: "1px solid var(--border-base)",
+                            color: "var(--text-base)",
+                            resize: "vertical",
+                          }}
+                        />
+                      </div>
+
+                      {/* Private Key Content Textarea */}
+                      <div>
+                        <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
+                          Private Key Content
+                        </label>
+                        <textarea
+                          value={addKeyPrivateContent()}
+                          onInput={(e) => setAddKeyPrivateContent(e.currentTarget.value)}
+                          placeholder="Paste your SSH private key here (e.g., -----BEGIN OPENSSH PRIVATE KEY-----)"
+                          rows={8}
+                          class="w-full px-3 py-2 rounded-md text-xs font-mono"
+                          style={{
+                            background: "var(--surface-inset)",
+                            border: "1px solid var(--border-base)",
+                            color: "var(--text-base)",
+                            resize: "vertical",
+                          }}
+                        />
+                        <p class="text-xs mt-1 text-orange-600">
+                          ⚠️ Warning: Anyone with access to this notebook environment can read this private key. Only
+                          use keys specifically created for this notebook.
+                        </p>
+                      </div>
+
+                      {/* Auto-detected Key Name */}
+                      <div>
+                        <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
+                          Key Name
+                        </label>
+                        <input
+                          type="text"
+                          value={addKeyName()}
+                          onInput={(e) => setAddKeyName(e.currentTarget.value)}
+                          placeholder="my_key"
+                          class="w-full px-3 py-2 rounded-md text-sm"
+                          style={{
+                            background: "var(--surface-inset)",
+                            border: "1px solid var(--border-base)",
+                            color: "var(--text-base)",
+                          }}
+                        />
+                        <p class="text-xs mt-1" style={{ color: "var(--text-weak)" }}>
+                          Files will be saved as ~/.ssh/{addKeyName() || "key_name"} (private) and ~/.ssh/
+                          {addKeyName() || "key_name"}.pub (public)
+                        </p>
+                      </div>
+
+                      {/* Error Message */}
+                      <Show when={addKeyError()}>
+                        <div class="p-3 bg-red-50 border border-red-200 text-red-800 rounded-md text-sm">
+                          {addKeyError()}
+                        </div>
+                      </Show>
+
+                      {/* Action Buttons */}
+                      <div class="flex gap-2 justify-end pt-2">
+                        <button
+                          onClick={closeAddKeyDialog}
+                          disabled={addKeyAdding()}
+                          class="px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
+                          style={{
+                            background: "var(--surface-inset)",
+                            color: "var(--text-base)",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={addExistingSshKey}
+                          disabled={
+                            addKeyAdding() ||
+                            !addKeyContent().trim() ||
+                            !addKeyPrivateContent().trim() ||
+                            !addKeyName().trim()
+                          }
+                          class="inline-flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
+                          style={{
+                            background: "var(--interactive-base)",
+                            color: "white",
+                          }}
+                          title={
+                            !addKeyPrivateContent().trim() ? "Private key is required for Git operations" : undefined
+                          }
+                        >
+                          <Show when={addKeyAdding()} fallback="Add Key Pair">
+                            <Spinner class="w-4 h-4" />
+                            Adding...
+                          </Show>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Show>
+
+              {/* Remove Key Confirmation Dialog */}
+              <Show when={keyToRemove()}>
+                <div
+                  class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                  style={{ background: "rgba(0, 0, 0, 0.5)" }}
+                  onClick={() => setKeyToRemove(null)}
+                >
+                  <div
+                    class="rounded-lg p-6 max-w-md w-full"
+                    style={{
+                      background: "var(--background-base)",
+                      border: "1px solid var(--border-base)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div class="flex items-center justify-between mb-4">
+                      <h3 class="text-lg font-semibold" style={{ color: "var(--text-strong)" }}>
+                        Remove SSH Key
+                      </h3>
+                      <button
+                        onClick={() => setKeyToRemove(null)}
+                        class="p-1 rounded transition-colors"
+                        style={{ color: "var(--text-weak)" }}
+                      >
+                        <X class="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <p class="text-sm mb-6" style={{ color: "var(--text-base)" }}>
+                      Are you sure you want to remove the key <strong>{keyToRemove()}</strong>?
+                      <br />
+                      <br />
+                      This will delete both the public key ({keyToRemove()}.pub) and the private key ({keyToRemove()}).
+                      This action cannot be undone.
+                    </p>
+
+                    <div class="flex gap-2 justify-end">
+                      <button
+                        onClick={() => setKeyToRemove(null)}
+                        disabled={removeKeyLoading()}
+                        class="px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
+                        style={{
+                          background: "var(--surface-inset)",
+                          color: "var(--text-base)",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          const name = keyToRemove()
+                          if (name) removeSshKey(name)
+                        }}
+                        disabled={removeKeyLoading()}
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 bg-red-600 hover:bg-red-700 text-white"
+                      >
+                        <Show when={removeKeyLoading()} fallback="Remove">
+                          <Spinner class="w-4 h-4" />
+                          Removing...
+                        </Show>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Show>
 
               {/* Instructions Section */}
               <section

@@ -6,6 +6,8 @@ type SDKClient = ReturnType<typeof createOpencodeClient>
 
 interface SDKContextValue {
   client: SDKClient
+  /** Global client without directory context - for operations that should work regardless of project */
+  global: SDKClient
   url: string
   directory?: string
 }
@@ -21,8 +23,14 @@ export function SDKProvider(props: ParentProps & { directory?: string }) {
     throwOnError: true,
   })
 
+  // Global client without directory - for PTY operations, SSH keys, etc.
+  const global = createOpencodeClient({
+    baseUrl: serverUrl,
+    throwOnError: true,
+  })
+
   return (
-    <SDKContext.Provider value={{ client, url: serverUrl, directory: props.directory }}>
+    <SDKContext.Provider value={{ client, global, url: serverUrl, directory: props.directory }}>
       {props.children}
     </SDKContext.Provider>
   )
