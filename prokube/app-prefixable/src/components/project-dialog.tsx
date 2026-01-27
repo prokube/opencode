@@ -4,6 +4,7 @@ import { useBasePath } from "../context/base-path"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Button } from "@opencode-ai/ui/button"
 import { Folder, X, GitBranch, AlertCircle } from "lucide-solid"
+import { Terminal } from "./terminal"
 
 type DialogView = "browse" | "clone"
 
@@ -33,8 +34,13 @@ export function ProjectDialog(props: ProjectDialogProps) {
   const [repoUrl, setRepoUrl] = createSignal("")
   const [cloning, setCloning] = createSignal(false)
   const [cloneError, setCloneError] = createSignal<string | null>(null)
+  const [clonePtyId, setClonePtyId] = createSignal<string | null>(null)
+  const [cloneSuccess, setCloneSuccess] = createSignal(false)
+  const [cloneTargetPath, setCloneTargetPath] = createSignal<string | null>(null)
 
   const client = createOpencodeClient({ baseUrl: serverUrl, throwOnError: false })
+  // Global client without directory context - for PTY operations
+  const global = createOpencodeClient({ baseUrl: serverUrl, throwOnError: false })
 
   // Load home directory on mount
   onMount(async () => {
@@ -155,91 +161,101 @@ export function ProjectDialog(props: ProjectDialogProps) {
     const url = repoUrl().trim()
     if (!url || !home || cloning()) return
 
+    // Extract repo name from URL for the target directory
+    const repoName = url
+      .split("/")
+      .pop()
+      ?.replace(/\.git$/, "")
+    if (!repoName) {
+      setCloneError("Invalid repository URL")
+      return
+    }
+
+    const targetPath = `${home}/${repoName}`.replace(/\/+/g, "/")
+
+    // Check if directory already exists
+    try {
+      await client.file.list({ path: targetPath })
+      setCloneError(`Directory '${repoName}' already exists. Please remove it first or choose a different repository.`)
+      return
+    } catch {
+      // Directory doesn't exist - good to proceed
+    }
+
     setCloning(true)
     setCloneError(null)
+    setCloneSuccess(false)
+    setCloneTargetPath(targetPath)
 
     try {
-      // Extract repo name from URL for the target directory
-      const repoName = url
-        .split("/")
-        .pop()
-        ?.replace(/\.git$/, "")
-      if (!repoName) {
-        setCloneError("Invalid repository URL")
-        setCloning(false)
-        return
-      }
-
-      const targetPath = `${home}/${repoName}`.replace(/\/+/g, "/")
-
-      // Use PTY to run git clone - create a session with the clone command
-      const res = await client.pty.create({
+      // Use global PTY to run git clone (no directory context)
+      const res = await global.pty.create({
         command: "git",
         args: ["clone", url, targetPath],
         cwd: home,
       })
 
-      if (res.data?.id) {
-        const ptyId = res.data.id
+      if (!res.data?.id) {
+        setCloneError("Failed to start git clone")
+        setCloning(false)
+        return
+      }
 
-        // Wait for clone to complete (poll for completion)
-        let attempts = 0
-        const maxAttempts = 120 // 2 minutes max
+      const ptyId = res.data.id
+      setClonePtyId(ptyId)
 
-        while (attempts < maxAttempts) {
-          await new Promise((r) => setTimeout(r, 1000))
-          attempts++
+      // Monitor PTY via WebSocket to detect when clone completes
+      const wsUrl = serverUrl.replace(/^http/, "ws") + `/pty/${ptyId}/connect`
+      const ws = new WebSocket(wsUrl)
 
-          // Try to get PTY status to check if it's done
-          try {
-            const getRes = await client.pty.get({ ptyID: ptyId })
-            const pty = getRes.data
+      ws.addEventListener("close", async (event) => {
+        console.log("[CloneRepo] PTY WebSocket closed:", event.code)
 
-            // Check if PTY has exited
-            if (pty?.status === "exited") {
-              // Check if directory was created (success indicator)
-              try {
-                await client.file.list({ path: targetPath })
-                // Directory exists - clone succeeded
-                await client.pty.remove({ ptyID: ptyId }).catch(() => {})
-                await loadHomeFolders(home)
-                selectProject(targetPath)
-                return
-              } catch {
-                // Directory doesn't exist - clone failed
-                setCloneError("Clone failed - check repository URL and credentials")
-                await client.pty.remove({ ptyID: ptyId }).catch(() => {})
-                setCloning(false)
-                return
-              }
-            }
-          } catch {
-            // PTY might have been removed, check if directory exists
-            break
-          }
-        }
-
-        // If we get here, try to select the project anyway (clone might have succeeded)
-        await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+        // PTY closed means git clone finished
+        setCloning(false)
 
         // Check if clone succeeded by checking if directory exists
         try {
           await client.file.list({ path: targetPath })
+          // Directory exists - clone succeeded
+          setCloneSuccess(true)
           await loadHomeFolders(home)
-          selectProject(targetPath)
         } catch {
-          setCloneError("Clone timed out or failed")
-          setCloning(false)
+          // Directory doesn't exist - clone failed
+          setCloneError("Clone failed - check repository URL and credentials")
         }
-      } else {
-        setCloneError("Failed to start git clone")
+      })
+
+      ws.addEventListener("error", (e) => {
+        console.error("[CloneRepo] WebSocket error:", e)
+        setCloneError("Connection error during clone")
         setCloning(false)
-      }
+      })
     } catch (e) {
       console.error("Failed to clone repository:", e)
       setCloneError(e instanceof Error ? e.message : "Clone failed")
       setCloning(false)
     }
+  }
+
+  async function cancelClone() {
+    const ptyId = clonePtyId()
+    if (!ptyId) return
+
+    try {
+      await global.pty.remove({ ptyID: ptyId })
+      setClonePtyId(null)
+      setCloning(false)
+      setCloneError("Clone cancelled")
+    } catch (e) {
+      console.error("Failed to cancel clone:", e)
+    }
+  }
+
+  async function openClonedProject() {
+    const targetPath = cloneTargetPath()
+    if (!targetPath) return
+    selectProject(targetPath)
   }
 
   // Handle escape key
@@ -500,7 +516,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
                 </Show>
 
                 {/* Clone target info */}
-                <Show when={repoUrl().trim() && homeDirectory()}>
+                <Show when={repoUrl().trim() && homeDirectory() && !clonePtyId()}>
                   <p class="text-xs" style={{ color: "var(--text-weak)" }}>
                     Will clone to: {homeDirectory()}/
                     {repoUrl()
@@ -510,24 +526,87 @@ export function ProjectDialog(props: ProjectDialogProps) {
                   </p>
                 </Show>
 
+                {/* Terminal Output */}
+                <Show when={clonePtyId()}>
+                  <div
+                    class="rounded-md overflow-hidden"
+                    style={{
+                      border: "1px solid var(--border-base)",
+                      height: "300px",
+                    }}
+                  >
+                    <Terminal ptyId={clonePtyId()!} />
+                  </div>
+                </Show>
+
+                {/* Success message */}
+                <Show when={cloneSuccess()}>
+                  <div
+                    class="px-3 py-2 rounded-md text-sm"
+                    style={{ background: "var(--status-success-dim)", color: "var(--status-success-text)" }}
+                  >
+                    ✓ Repository cloned successfully!
+                  </div>
+                </Show>
+
                 {/* Actions */}
                 <div class="flex gap-2">
-                  <Button onClick={() => setShowCloneForm(false)} variant="secondary" class="flex-1">
-                    Back
-                  </Button>
-                  <Button
-                    onClick={cloneRepo}
-                    variant="primary"
-                    class="flex-1"
-                    disabled={!repoUrl().trim() || cloning()}
+                  <Show
+                    when={cloneSuccess()}
+                    fallback={
+                      <>
+                        <Button
+                          onClick={() => {
+                            setShowCloneForm(false)
+                            setClonePtyId(null)
+                            setCloneError(null)
+                            setCloneSuccess(false)
+                          }}
+                          variant="secondary"
+                          class="flex-1"
+                          disabled={cloning()}
+                        >
+                          Back
+                        </Button>
+                        <Show when={cloning()}>
+                          <Button onClick={cancelClone} variant="secondary" class="flex-1">
+                            Cancel Clone
+                          </Button>
+                        </Show>
+                        <Button
+                          onClick={cloneRepo}
+                          variant="primary"
+                          class="flex-1"
+                          disabled={!repoUrl().trim() || cloning()}
+                        >
+                          <Show when={cloning()} fallback="Clone">
+                            <div class="flex items-center gap-2">
+                              <Spinner class="w-4 h-4" />
+                              <span>Cloning...</span>
+                            </div>
+                          </Show>
+                        </Button>
+                      </>
+                    }
                   >
-                    <Show when={cloning()} fallback="Clone">
-                      <div class="flex items-center gap-2">
-                        <Spinner class="w-4 h-4" />
-                        <span>Cloning...</span>
-                      </div>
-                    </Show>
-                  </Button>
+                    {/* Success state buttons */}
+                    <Button
+                      onClick={() => {
+                        setShowCloneForm(false)
+                        setClonePtyId(null)
+                        setCloneError(null)
+                        setCloneSuccess(false)
+                        setRepoUrl("")
+                      }}
+                      variant="secondary"
+                      class="flex-1"
+                    >
+                      Clone Another
+                    </Button>
+                    <Button onClick={openClonedProject} variant="primary" class="flex-1">
+                      Open Project
+                    </Button>
+                  </Show>
                 </div>
               </div>
             </Show>
