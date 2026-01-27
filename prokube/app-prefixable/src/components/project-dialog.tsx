@@ -37,6 +37,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
   const [clonePtyId, setClonePtyId] = createSignal<string | null>(null)
   const [cloneSuccess, setCloneSuccess] = createSignal(false)
   const [cloneTargetPath, setCloneTargetPath] = createSignal<string | null>(null)
+  let clonePollInterval: ReturnType<typeof setInterval> | null = null
 
   const client = createOpencodeClient({ baseUrl: serverUrl, throwOnError: false })
   // Global client without directory context - for PTY operations
@@ -195,33 +196,43 @@ export function ProjectDialog(props: ProjectDialogProps) {
       const ptyId = res.data.id
       setClonePtyId(ptyId)
 
-      // Monitor PTY via WebSocket to detect when clone completes
-      const wsUrl = serverUrl.replace(/^http/, "ws") + `/pty/${ptyId}/connect`
-      const ws = new WebSocket(wsUrl)
-
-      ws.addEventListener("close", async (event) => {
-        console.log("[CloneRepo] PTY WebSocket closed:", event.code)
-
-        // PTY closed means git clone finished
-        setCloning(false)
-
-        // Check if clone succeeded by checking if directory exists
+      // Poll PTY status to detect when git clone completes
+      clonePollInterval = setInterval(async () => {
         try {
-          await global.file.list({ path: targetPath })
-          // Directory exists - clone succeeded
-          setCloneSuccess(true)
-          await loadHomeFolders(home)
-        } catch {
-          // Directory doesn't exist - clone failed
-          setCloneError("Clone failed - check repository URL and credentials")
-        }
-      })
+          const ptyStatus = await global.pty.get({ ptyID: ptyId })
+          console.log("[CloneRepo] PTY status:", ptyStatus.data?.status)
+          
+          if (ptyStatus.data?.status === "exited") {
+            if (clonePollInterval) clearInterval(clonePollInterval)
+            clonePollInterval = null
+            setCloning(false)
 
-      ws.addEventListener("error", (e) => {
-        console.error("[CloneRepo] WebSocket error:", e)
-        setCloneError("Connection error during clone")
-        setCloning(false)
-      })
+            // Check if clone succeeded by checking if directory exists
+            try {
+              const listResult = await global.file.list({ path: targetPath })
+              // Check if we got any files back (indicating directory exists and has content)
+              if (listResult.data && Array.isArray(listResult.data) && listResult.data.length >= 0) {
+                // Directory exists - clone succeeded
+                console.log("[CloneRepo] Clone succeeded, directory exists")
+                setCloneSuccess(true)
+                await loadHomeFolders(home)
+              } else {
+                setCloneError("Clone failed - check repository URL and credentials")
+              }
+            } catch (e) {
+              console.error("[CloneRepo] Failed to check directory:", e)
+              setCloneError("Clone failed - check repository URL and credentials")
+            }
+          }
+        } catch (e) {
+          // PTY might have been removed
+          console.error("[CloneRepo] Failed to get PTY status:", e)
+          if (clonePollInterval) clearInterval(clonePollInterval)
+          clonePollInterval = null
+          setCloning(false)
+          setCloneError("Clone process ended unexpectedly")
+        }
+      }, 1000) // Poll every second
     } catch (e) {
       console.error("Failed to clone repository:", e)
       setCloneError(e instanceof Error ? e.message : "Clone failed")
@@ -232,6 +243,12 @@ export function ProjectDialog(props: ProjectDialogProps) {
   async function cancelClone() {
     const ptyId = clonePtyId()
     if (!ptyId) return
+
+    // Stop polling
+    if (clonePollInterval) {
+      clearInterval(clonePollInterval)
+      clonePollInterval = null
+    }
 
     try {
       await global.pty.remove({ ptyID: ptyId })
