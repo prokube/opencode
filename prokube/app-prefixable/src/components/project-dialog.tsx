@@ -114,8 +114,10 @@ export function ProjectDialog(props: ProjectDialogProps) {
         type: "directory",
         limit: 20,
       })
-      const results = res.data ?? []
-      setSearchResults(results.map((r) => `${home}/${r}`.replace(/\/+/g, "/")))
+      // Handle both array response and wrapped response
+      const data = res.data
+      const results = Array.isArray(data) ? data : ((data as unknown as { files?: string[] })?.files ?? [])
+      setSearchResults(results.map((r: string) => `${home}/${r}`.replace(/\/+/g, "/")))
     } catch (e) {
       console.error("Failed to search folders:", e)
       setSearchResults([])
