@@ -203,7 +203,8 @@ export function ProjectDialog(props: ProjectDialogProps) {
           const ptyStatus = await global.pty.get({ ptyID: ptyId })
           console.log("[CloneRepo] PTY status poll result:", ptyStatus.data?.status, "full data:", ptyStatus.data)
           
-          if (ptyStatus.data?.status === "exited") {
+          // PTY is either exited or has been removed (undefined means removed)
+          if (ptyStatus.data?.status === "exited" || !ptyStatus.data) {
             console.log("[CloneRepo] PTY exited, cleaning up...")
             if (clonePollInterval) clearInterval(clonePollInterval)
             clonePollInterval = null
