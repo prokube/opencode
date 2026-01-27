@@ -1266,54 +1266,95 @@ export function Session() {
             </Show>
 
             <form onSubmit={sendMessage} class="flex gap-3">
-              <div class="flex-1 relative">
-                <textarea
-                  ref={inputRef}
-                  value={input()}
-                  onInput={(e) => {
-                    handleInputChange(e.currentTarget.value)
-                    // Auto-grow: reset height then set to scrollHeight
-                    e.currentTarget.style.height = "auto"
-                    e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 200) + "px"
-                  }}
-                  onKeyDown={(e) => {
-                    // Handle slash command navigation first
-                    if (showSlashPopover()) {
-                      handleInputKeyDown(e)
-                      return
-                    }
-                    // Enter to submit (without shift), Shift+Enter for newline
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      const form = e.currentTarget.closest("form")
-                      if (form) form.requestSubmit()
-                    }
-                  }}
-                  placeholder="Type a message or / for commands..."
-                  rows={1}
-                  class="w-full px-4 py-3 rounded-lg focus:ring-2 focus:outline-none resize-none"
-                  style={
-                    {
-                      background: "var(--background-base)",
-                      border: "1px solid var(--border-base)",
+              <div
+                class="flex-1 flex flex-col rounded-lg focus-within:ring-2"
+                style={
+                  {
+                    background: "var(--background-base)",
+                    border: "1px solid var(--border-base)",
+                    "--tw-ring-color": "var(--interactive-base)",
+                  } as any
+                }
+              >
+                <div class="relative flex-1">
+                  <textarea
+                    ref={inputRef}
+                    value={input()}
+                    onInput={(e) => {
+                      handleInputChange(e.currentTarget.value)
+                      // Auto-grow: reset height then set to scrollHeight
+                      e.currentTarget.style.height = "auto"
+                      e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 200) + "px"
+                    }}
+                    onKeyDown={(e) => {
+                      // Handle slash command navigation first
+                      if (showSlashPopover()) {
+                        handleInputKeyDown(e)
+                        return
+                      }
+                      // Enter to submit (without shift), Shift+Enter for newline
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        const form = e.currentTarget.closest("form")
+                        if (form) form.requestSubmit()
+                      }
+                    }}
+                    placeholder="Type a message or / for commands..."
+                    rows={1}
+                    class="w-full px-4 py-3 focus:outline-none resize-none bg-transparent"
+                    style={{
                       color: "var(--text-base)",
-                      "--tw-ring-color": "var(--interactive-base)",
                       "min-height": "48px",
                       "max-height": "200px",
                       "overflow-y": "auto",
-                    } as any
-                  }
-                />
-                {/* Hint for slash commands */}
-                <Show when={!input() && !loading() && !processing()}>
-                  <div class="absolute right-3 top-3 text-xs" style={{ color: "var(--text-weak)" }}>
-                    Type{" "}
-                    <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
-                      /
-                    </span>{" "}
-                    for commands
-                  </div>
-                </Show>
+                    }}
+                  />
+                  {/* Hint for slash commands */}
+                  <Show when={!input() && !loading() && !processing()}>
+                    <div class="absolute right-3 top-3 text-xs" style={{ color: "var(--text-weak)" }}>
+                      Type{" "}
+                      <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
+                        /
+                      </span>{" "}
+                      for commands
+                    </div>
+                  </Show>
+                </div>
+
+                {/* Model/Agent indicator inside input box */}
+                <div
+                  class="flex items-center gap-3 px-4 py-1.5 text-xs border-t"
+                  style={{ color: "var(--text-weak)", "border-color": "var(--border-base)" }}
+                >
+                  <Show when={providers.selectedAgent}>
+                    <span class="flex items-center gap-1">
+                      <span class="opacity-60">Agent:</span>
+                      <span class="capitalize" style={{ color: "var(--text-base)" }}>
+                        {providers.selectedAgent}
+                      </span>
+                    </span>
+                  </Show>
+                  <Show when={providers.selectedModel}>
+                    {(model) => (
+                      <span class="flex items-center gap-1">
+                        <span class="opacity-60">Model:</span>
+                        <span style={{ color: "var(--text-base)" }}>{model().modelID}</span>
+                      </span>
+                    )}
+                  </Show>
+                  <Show when={!providers.selectedModel && providers.connected.length === 0}>
+                    <a
+                      href={`/${dirSlug()}/settings`}
+                      style={{ color: "var(--text-interactive-base)" }}
+                      class="hover:underline"
+                    >
+                      Connect a provider to start
+                    </a>
+                  </Show>
+                  <Show when={!providers.selectedModel && providers.connected.length > 0}>
+                    <span style={{ color: "var(--status-warning-text)" }}>No model selected</span>
+                  </Show>
+                </div>
               </div>
 
               {/* Stop button during processing, Send button otherwise */}
@@ -1348,42 +1389,6 @@ export function Session() {
                 </button>
               </Show>
             </form>
-
-            {/* Current model/agent indicator */}
-            <div class="flex items-center gap-4 mt-2 text-xs" style={{ color: "var(--text-weak)" }}>
-              <Show when={providers.selectedAgent}>
-                <span>
-                  Agent:{" "}
-                  <span class="font-medium capitalize" style={{ color: "var(--text-base)" }}>
-                    {providers.selectedAgent}
-                  </span>
-                </span>
-              </Show>
-              <Show when={providers.selectedModel}>
-                {(model) => (
-                  <span>
-                    Model:{" "}
-                    <span class="font-medium" style={{ color: "var(--text-base)" }}>
-                      {model().providerID}/{model().modelID}
-                    </span>
-                  </span>
-                )}
-              </Show>
-              <Show when={!providers.selectedModel && providers.connected.length === 0}>
-                <a
-                  href={`/${dirSlug()}/settings`}
-                  style={{ color: "var(--text-interactive-base)" }}
-                  class="hover:underline"
-                >
-                  Connect a provider to start
-                </a>
-              </Show>
-              <Show when={!providers.selectedModel && providers.connected.length > 0}>
-                <span style={{ color: "var(--status-warning-text)" }}>
-                  No model selected - click the model button in the header to choose one
-                </span>
-              </Show>
-            </div>
           </div>
         </div>
 
