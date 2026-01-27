@@ -86,8 +86,10 @@ export function ProjectDialog(props: ProjectDialogProps) {
       const data = res.data
       const results = Array.isArray(data) ? data : ((data as unknown as { files?: string[] })?.files ?? [])
       // Filter to only show top-level directories (no nested paths)
+      // Remove trailing slash before checking for nested paths
       const topLevel = results
-        .filter((r: string) => !r.includes("/"))
+        .map((r: string) => r.replace(/\/$/, "")) // Remove trailing slash
+        .filter((r: string) => !r.includes("/")) // Now check for nested paths
         .map((r: string) => `${home}/${r}`.replace(/\/+/g, "/"))
       setHomeFolders(topLevel)
     } catch (e) {
