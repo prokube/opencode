@@ -74,9 +74,13 @@ export function ProjectDialog(props: ProjectDialogProps) {
         type: "directory",
         limit: 50,
       })
-      const results = res.data ?? []
+      // Handle both array response and wrapped response
+      const data = res.data
+      const results = Array.isArray(data) ? data : ((data as unknown as { files?: string[] })?.files ?? [])
       // Filter to only show top-level directories (no nested paths)
-      const topLevel = results.filter((r) => !r.includes("/")).map((r) => `${home}/${r}`.replace(/\/+/g, "/"))
+      const topLevel = results
+        .filter((r: string) => !r.includes("/"))
+        .map((r: string) => `${home}/${r}`.replace(/\/+/g, "/"))
       setHomeFolders(topLevel)
     } catch (e) {
       console.error("Failed to load home folders:", e)
