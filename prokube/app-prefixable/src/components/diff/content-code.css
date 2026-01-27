@@ -13,8 +13,8 @@
 }
 
 .content-code pre {
-  --shiki-dark-bg: var(--surface-inset) !important;
-  background-color: var(--surface-inset) !important;
+  --shiki-dark-bg: transparent !important;
+  background-color: transparent !important;
   line-height: 1.6;
   font-size: 0.75rem;
   white-space: pre-wrap;

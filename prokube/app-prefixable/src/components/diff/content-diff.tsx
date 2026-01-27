@@ -102,7 +102,7 @@ export function ContentDiff(props: Props) {
         }
       }
     } catch (error) {
-      console.error("Failed to parse patch:", error)
+      console.error("[ContentDiff] Failed to parse patch:", error)
       return []
     }
 

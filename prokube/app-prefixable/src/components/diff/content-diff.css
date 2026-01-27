@@ -49,14 +49,9 @@
   border-right: 1px solid var(--border-base);
 }
 
-/* Removed lines (red) */
+/* Removed lines (fuchsia/magenta) */
 .diff-slot[data-diff-type="removed"] {
-  background-color: rgba(248, 81, 73, 0.15);
-}
-
-.diff-slot[data-diff-type="removed"] pre {
-  --shiki-dark-bg: rgba(248, 81, 73, 0.15) !important;
-  background-color: rgba(248, 81, 73, 0.15) !important;
+  background-color: rgba(192, 38, 211, 0.12);
 }
 
 .diff-slot[data-diff-type="removed"]::before {
@@ -65,25 +60,20 @@
   left: 0.6ch;
   top: 1px;
   user-select: none;
-  color: #f85149;
+  color: #c026d3;
   font-weight: 600;
 }
 
-/* Added lines (green) */
+/* Added lines (indigo) */
 .diff-slot[data-diff-type="added"] {
-  background-color: rgba(63, 185, 80, 0.15);
-}
-
-.diff-slot[data-diff-type="added"] pre {
-  --shiki-dark-bg: rgba(63, 185, 80, 0.15) !important;
-  background-color: rgba(63, 185, 80, 0.15) !important;
+  background-color: rgba(99, 102, 241, 0.12);
 }
 
 .diff-slot[data-diff-type="added"]::before {
   content: "+";
   position: absolute;
   user-select: none;
-  color: #3fb950;
+  color: #6366f1;
   left: 0.6ch;
   top: 1px;
   font-weight: 600;
@@ -104,12 +94,7 @@
 
 .diff-mobile > .diff-block > div[data-diff-type="removed"] {
   position: relative;
-  background-color: rgba(248, 81, 73, 0.15);
-}
-
-.diff-mobile > .diff-block > div[data-diff-type="removed"] pre {
-  --shiki-dark-bg: rgba(248, 81, 73, 0.15) !important;
-  background-color: rgba(248, 81, 73, 0.15) !important;
+  background-color: rgba(192, 38, 211, 0.12);
 }
 
 .diff-mobile > .diff-block > div[data-diff-type="removed"]::before {
@@ -118,18 +103,13 @@
   left: 0.6ch;
   top: 1px;
   user-select: none;
-  color: #f85149;
+  color: #c026d3;
   font-weight: 600;
 }
 
 .diff-mobile > .diff-block > div[data-diff-type="added"] {
   position: relative;
-  background-color: rgba(63, 185, 80, 0.15);
-}
-
-.diff-mobile > .diff-block > div[data-diff-type="added"] pre {
-  --shiki-dark-bg: rgba(63, 185, 80, 0.15) !important;
-  background-color: rgba(63, 185, 80, 0.15) !important;
+  background-color: rgba(99, 102, 241, 0.12);
 }
 
 .diff-mobile > .diff-block > div[data-diff-type="added"]::before {
@@ -138,7 +118,7 @@
   left: 0.6ch;
   top: 1px;
   user-select: none;
-  color: #3fb950;
+  color: #6366f1;
   font-weight: 600;
 }
 

@@ -37,6 +37,14 @@ export function TerminalProvider(props: ParentProps) {
     setCreating(true)
     setError(null)
     try {
+      // Ensure the directory exists before creating the PTY
+      if (cwd) {
+        console.log("[Terminal] Ensuring directory exists:", cwd)
+        await client.file.mkdir({ path: cwd }).catch(() => {
+          // Directory might already exist, ignore error
+        })
+      }
+
       console.log("[Terminal] Creating PTY session, cwd:", cwd)
       const res = await client.pty.create({ cwd })
       console.log("[Terminal] PTY create response:", res)

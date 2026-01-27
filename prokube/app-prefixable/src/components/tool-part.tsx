@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from "solid-js"
+import { createSignal, createEffect, Show, For } from "solid-js"
 import type { Part, ToolPart as SDKToolPart, ToolState } from "@opencode-ai/sdk/v2/client"
 import { ChevronDown } from "lucide-solid"
 import { ContentDiff } from "./diff/content-diff"
@@ -143,15 +143,25 @@ function getMetadata(state: ToolState): Record<string, unknown> | undefined {
 
 export function ToolPartDisplay(props: { part: ToolPart }) {
   const [expanded, setExpanded] = createSignal(false)
+  let autoExpanded = false
 
   const state = () => props.part.state
   const status = () => getStatus(state())
-  const canExpand = () => hasOutput(state())
-  const title = () => getTitle(state()) || props.part.tool
   const metadata = () => getMetadata(state())
   const isEdit = () => props.part.tool === "edit"
   const hasDiff = () => isEdit() && metadata()?.diff
+  // Can expand if has output OR has diff
+  const canExpand = () => hasOutput(state()) || hasDiff()
+  const title = () => getTitle(state()) || props.part.tool
   const filePath = () => (getInput(state()) as { filePath?: string })?.filePath || ""
+
+  // Auto-expand edit tools when diff becomes available (only once)
+  createEffect(() => {
+    if (hasDiff() && !autoExpanded) {
+      autoExpanded = true
+      setExpanded(true)
+    }
+  })
 
   return (
     <div
@@ -211,8 +221,8 @@ export function ToolPartDisplay(props: { part: ToolPart }) {
         </Show>
       </button>
 
-      {/* Diff display for edit tools - shown inline (not in expanded section) */}
-      <Show when={hasDiff()}>
+      {/* Diff display for edit tools - controlled by expanded state */}
+      <Show when={expanded() && hasDiff()}>
         <div class="px-3 py-2" style={{ "border-top": "1px solid var(--border-base)" }}>
           <ContentDiff diff={metadata()?.diff as string} lang={getLangFromPath(filePath())} />
         </div>

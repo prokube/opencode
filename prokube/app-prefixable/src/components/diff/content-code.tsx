@@ -25,7 +25,13 @@ export function ContentCode(props: Props) {
   )
 
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <pre class="content-code" data-flush={props.flush === true ? true : undefined}>
+          {props.code}
+        </pre>
+      }
+    >
       <div innerHTML={html()} class="content-code" data-flush={props.flush === true ? true : undefined} />
     </Suspense>
   )

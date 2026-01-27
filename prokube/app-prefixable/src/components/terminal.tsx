@@ -38,7 +38,6 @@ export function Terminal(props: TerminalProps) {
     const wsUrl =
       url.replace(/^http/, "ws") + `/pty/${props.ptyId}/connect?directory=${encodeURIComponent(directory || "")}`
     console.log("[Terminal] Connecting to:", wsUrl)
-    writeStatus(`Connecting to ${wsUrl}...`, "info")
 
     setStatus("connecting")
     setError(null)
@@ -48,7 +47,6 @@ export function Terminal(props: TerminalProps) {
     ws.addEventListener("open", () => {
       console.log("[Terminal] WebSocket connected")
       setStatus("connected")
-      writeStatus("Connected! Waiting for shell output...", "success")
 
       // Send initial size after connection
       if (term) {
@@ -102,17 +100,35 @@ export function Terminal(props: TerminalProps) {
   onMount(() => {
     console.log("[Terminal] Mounting, ptyId:", props.ptyId)
 
-    // Create terminal
+    // Create terminal with light theme
     term = new XTerm({
       cursorBlink: true,
       cursorStyle: "bar",
       fontSize: 14,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       theme: {
-        background: "#1a1a1a",
-        foreground: "#d4d4d4",
-        cursor: "#d4d4d4",
-        selectionBackground: "rgba(255, 255, 255, 0.2)",
+        background: "#ffffff",
+        foreground: "#1f2937",
+        cursor: "#1f2937",
+        cursorAccent: "#ffffff",
+        selectionBackground: "rgba(59, 130, 246, 0.3)",
+        selectionForeground: "#1f2937",
+        black: "#1f2937",
+        red: "#dc2626",
+        green: "#16a34a",
+        yellow: "#ca8a04",
+        blue: "#2563eb",
+        magenta: "#9333ea",
+        cyan: "#0891b2",
+        white: "#f3f4f6",
+        brightBlack: "#6b7280",
+        brightRed: "#ef4444",
+        brightGreen: "#22c55e",
+        brightYellow: "#eab308",
+        brightBlue: "#3b82f6",
+        brightMagenta: "#a855f7",
+        brightCyan: "#06b6d4",
+        brightWhite: "#ffffff",
       },
       scrollback: 10000,
     })
@@ -125,10 +141,8 @@ export function Terminal(props: TerminalProps) {
     term.open(container)
     console.log("[Terminal] Terminal opened in container")
 
-    // Show initial status
-    writeStatus(`Terminal initialized (PTY ID: ${props.ptyId})`, "info")
-    writeStatus(`Server URL: ${url}`, "info")
-    writeStatus(`Directory: ${directory || "(none)"}`, "info")
+    // Show initializing message
+    writeStatus("Initializing terminal...", "info")
 
     // Send terminal input to WebSocket
     term.onData((data) => {
@@ -200,7 +214,7 @@ export function Terminal(props: TerminalProps) {
       ref={container}
       class="size-full"
       style={{
-        background: "#1a1a1a",
+        background: "#ffffff",
         padding: "8px",
         "min-height": "100px",
       }}

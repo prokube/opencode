@@ -67,6 +67,14 @@ const server = Bun.serve<{ target: string }>({
       "/agent",
       "/session",
       "/find",
+      "/question",
+      "/global",
+      "/skill",
+      "/lsp",
+      "/formatter",
+      "/doc",
+      "/log",
+      "/instance",
     ]
 
     // Check if this is an API request using the stripped path

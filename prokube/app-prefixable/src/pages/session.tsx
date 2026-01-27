@@ -10,9 +10,11 @@ import { Markdown } from "../components/markdown"
 import { MessageParts } from "../components/tool-part"
 import { MCPDialog } from "../components/mcp-dialog"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
+import { QuestionPrompt } from "../components/question-prompt"
 import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
-import { Plus, Settings, ChevronDown, MessageCircle } from "lucide-solid"
+import type { QuestionRequest } from "@opencode-ai/sdk/v2"
+import { Plus, Settings, ChevronDown, MessageCircle, Square } from "lucide-solid"
 
 interface Command {
   id: string
@@ -80,6 +82,7 @@ export function Session() {
   const [showMCPDialog, setShowMCPDialog] = createSignal(false)
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
+  const [pendingQuestion, setPendingQuestion] = createSignal<QuestionRequest | null>(null)
 
   // Model picker state
   const [modelFilter, setModelFilter] = createSignal("")
@@ -186,7 +189,7 @@ export function Session() {
     const result: { provider: { id: string; name: string }; model: { id: string; name: string } }[] = []
 
     for (const provider of providers.providers.filter((p) => providers.connected.includes(p.id))) {
-      for (const model of Object.values(provider.models).slice(0, 10)) {
+      for (const model of Object.values(provider.models)) {
         if (
           !filter ||
           model.name.toLowerCase().includes(filter) ||
@@ -438,6 +441,81 @@ export function Session() {
 
     return unsub
   })
+
+  // Poll for pending questions (always poll when we have a session)
+  createEffect(() => {
+    const id = sessionId()
+    if (!id) {
+      setPendingQuestion(null)
+      return
+    }
+
+    let active = true
+    const poll = async () => {
+      while (active) {
+        try {
+          const res = await client.question.list({ directory })
+          console.log("[Session] Question list response:", res)
+          // res.data is the array of questions
+          const questions = Array.isArray(res.data) ? res.data : []
+          // Find a question for this session
+          const q = questions.find((q) => q.sessionID === id)
+          if (q && active) {
+            console.log("[Session] Found pending question:", q)
+            setPendingQuestion(q)
+          } else if (active) {
+            setPendingQuestion(null)
+          }
+        } catch (e) {
+          console.error("[Session] Failed to poll questions:", e)
+        }
+        await new Promise((r) => setTimeout(r, 1000))
+      }
+    }
+    poll()
+
+    onCleanup(() => {
+      active = false
+    })
+  })
+
+  async function handleQuestionReply(answers: string[][]) {
+    const q = pendingQuestion()
+    if (!q) return
+
+    try {
+      await client.question.reply({ requestID: q.id, answers, directory })
+      setPendingQuestion(null)
+    } catch (e) {
+      console.error("[Session] Failed to reply to question:", e)
+    }
+  }
+
+  async function handleQuestionReject() {
+    const q = pendingQuestion()
+    if (!q) return
+
+    try {
+      await client.question.reject({ requestID: q.id, directory })
+      setPendingQuestion(null)
+    } catch (e) {
+      console.error("[Session] Failed to reject question:", e)
+    }
+  }
+
+  async function handleAbort() {
+    const id = sessionId()
+    if (!id) return
+
+    try {
+      console.log("[Session] Aborting session:", id)
+      await client.session.abort({ sessionID: id, directory })
+      setProcessing(false)
+      setPendingQuestion(null)
+    } catch (e) {
+      console.error("[Session] Failed to abort session:", e)
+    }
+  }
 
   // Auto-scroll to bottom
   createEffect(() => {
@@ -1022,9 +1100,9 @@ export function Session() {
 
               return (
                 <div
-                  class="max-w-3xl"
+                  class="w-full"
                   classList={{
-                    "ml-auto": message.role === "user",
+                    "max-w-2xl ml-auto": message.role === "user",
                   }}
                 >
                   {/* Tool-only assistant messages: flat layout, no outer box */}
@@ -1082,8 +1160,17 @@ export function Session() {
             }}
           </For>
 
-          <Show when={processing()}>
-            <div class="max-w-3xl">
+          {/* Question Prompt */}
+          <Show when={pendingQuestion()}>
+            {(q) => (
+              <div class="w-full">
+                <QuestionPrompt request={q()} onReply={handleQuestionReply} onReject={handleQuestionReject} />
+              </div>
+            )}
+          </Show>
+
+          <Show when={processing() && !pendingQuestion()}>
+            <div class="w-full">
               <div
                 class="rounded-lg p-4"
                 style={{
@@ -1104,7 +1191,7 @@ export function Session() {
 
         {/* Input */}
         <div class="p-4" style={{ background: "var(--background-base)", "border-top": "1px solid var(--border-base)" }}>
-          <div class="relative max-w-3xl mx-auto">
+          <div class="relative w-full">
             {/* Slash Command Popover */}
             <Show when={showSlashPopover() && filteredSlashCommands().length > 0}>
               <div
@@ -1178,7 +1265,7 @@ export function Session() {
               </div>
             </Show>
 
-            <form onSubmit={sendMessage} class="flex gap-3 items-end">
+            <form onSubmit={sendMessage} class="flex gap-3">
               <div class="flex-1 relative">
                 <textarea
                   ref={inputRef}
@@ -1228,11 +1315,38 @@ export function Session() {
                   </div>
                 </Show>
               </div>
-              <Button type="submit" disabled={loading() || processing() || !input().trim() || showSlashPopover()}>
-                <Show when={loading()} fallback="Send">
-                  <Spinner class="w-4 h-4" />
-                </Show>
-              </Button>
+
+              {/* Stop button during processing, Send button otherwise */}
+              <Show
+                when={processing()}
+                fallback={
+                  <Button
+                    type="submit"
+                    disabled={loading() || !input().trim() || showSlashPopover()}
+                    class="self-end h-12"
+                  >
+                    <Show when={loading()} fallback="Send">
+                      <Spinner class="w-4 h-4" />
+                    </Show>
+                  </Button>
+                }
+              >
+                <button
+                  type="button"
+                  onClick={handleAbort}
+                  class="self-end h-12 flex items-center gap-1.5 px-4 rounded-lg transition-colors"
+                  style={{
+                    background: "var(--status-danger-dim)",
+                    color: "var(--status-danger-text)",
+                    border: "1px solid var(--status-danger-base)",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+                >
+                  <Square class="w-3.5 h-3.5" style={{ fill: "currentColor" }} />
+                  <span>Stop</span>
+                </button>
+              </Show>
             </form>
 
             {/* Current model/agent indicator */}

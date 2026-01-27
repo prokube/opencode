@@ -168,11 +168,11 @@ export function ProjectDialog(props: ProjectDialogProps) {
 
       const targetPath = `${home}/${repoName}`.replace(/\/+/g, "/")
 
-      // Use PTY to run git clone
-      const res = await client.pty.spawn({
-        args: ["git", "clone", url, targetPath],
-        cols: 120,
-        rows: 24,
+      // Use PTY to run git clone - create a session with the clone command
+      const res = await client.pty.create({
+        command: "git",
+        args: ["clone", url, targetPath],
+        cwd: home,
       })
 
       if (res.data?.id) {
@@ -186,61 +186,54 @@ export function ProjectDialog(props: ProjectDialogProps) {
           await new Promise((r) => setTimeout(r, 1000))
           attempts++
 
-          // Try to read output to check if it's done
+          // Try to get PTY status to check if it's done
           try {
-            const readRes = await client.pty.read({ id: ptyId })
-            const output = readRes.data?.data || ""
+            const getRes = await client.pty.get({ ptyID: ptyId })
+            const pty = getRes.data
 
-            // Check for error messages
-            if (
-              output.includes("fatal:") ||
-              output.includes("error:") ||
-              output.includes("Permission denied") ||
-              output.includes("Authentication failed")
-            ) {
-              // Extract error message
-              const lines = output.split("\n")
-              const errorLine = lines.find(
-                (l) =>
-                  l.includes("fatal:") ||
-                  l.includes("error:") ||
-                  l.includes("Permission denied") ||
-                  l.includes("Authentication failed"),
-              )
-              setCloneError(errorLine || "Clone failed - check repository URL and credentials")
-              await client.pty.kill({ id: ptyId })
-              setCloning(false)
-              return
-            }
-
-            // Check if clone completed successfully
-            if (
-              output.includes("Cloning into") &&
-              (output.includes("done.") || output.includes("Receiving objects: 100%"))
-            ) {
-              await client.pty.kill({ id: ptyId })
-              // Refresh home folders and select the new project
-              await loadHomeFolders(home)
-              selectProject(targetPath)
-              return
+            // Check if PTY has exited
+            if (pty?.status === "exited") {
+              // Check if directory was created (success indicator)
+              try {
+                await client.file.list({ path: targetPath })
+                // Directory exists - clone succeeded
+                await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+                await loadHomeFolders(home)
+                selectProject(targetPath)
+                return
+              } catch {
+                // Directory doesn't exist - clone failed
+                setCloneError("Clone failed - check repository URL and credentials")
+                await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+                setCloning(false)
+                return
+              }
             }
           } catch {
-            // PTY might have exited, check if directory exists
+            // PTY might have been removed, check if directory exists
             break
           }
         }
 
         // If we get here, try to select the project anyway (clone might have succeeded)
-        await client.pty.kill({ id: ptyId }).catch(() => {})
-        await loadHomeFolders(home)
-        selectProject(targetPath)
+        await client.pty.remove({ ptyID: ptyId }).catch(() => {})
+
+        // Check if clone succeeded by checking if directory exists
+        try {
+          await client.file.list({ path: targetPath })
+          await loadHomeFolders(home)
+          selectProject(targetPath)
+        } catch {
+          setCloneError("Clone timed out or failed")
+          setCloning(false)
+        }
       } else {
         setCloneError("Failed to start git clone")
+        setCloning(false)
       }
     } catch (e) {
       console.error("Failed to clone repository:", e)
       setCloneError(e instanceof Error ? e.message : "Clone failed")
-    } finally {
       setCloning(false)
     }
   }

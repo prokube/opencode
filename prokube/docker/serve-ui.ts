@@ -70,6 +70,7 @@ const apiPaths = [
   "/doc",
   "/log",
   "/instance",
+  "/question",
 ]
 
 function isApiPath(path: string): boolean {
