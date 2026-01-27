@@ -195,28 +195,35 @@ export function ProjectDialog(props: ProjectDialogProps) {
 
       const ptyId = res.data.id
       setClonePtyId(ptyId)
+      console.log("[CloneRepo] Starting polling for PTY:", ptyId)
 
       // Poll PTY status to detect when git clone completes
       clonePollInterval = setInterval(async () => {
         try {
           const ptyStatus = await global.pty.get({ ptyID: ptyId })
-          console.log("[CloneRepo] PTY status:", ptyStatus.data?.status)
+          console.log("[CloneRepo] PTY status poll result:", ptyStatus.data?.status, "full data:", ptyStatus.data)
           
           if (ptyStatus.data?.status === "exited") {
+            console.log("[CloneRepo] PTY exited, cleaning up...")
             if (clonePollInterval) clearInterval(clonePollInterval)
             clonePollInterval = null
             setCloning(false)
 
             // Check if clone succeeded by checking if directory exists
+            console.log("[CloneRepo] Checking if directory exists:", targetPath)
             try {
               const listResult = await global.file.list({ path: targetPath })
+              console.log("[CloneRepo] Directory check result:", listResult.data)
               // Check if we got any files back (indicating directory exists and has content)
               if (listResult.data && Array.isArray(listResult.data) && listResult.data.length >= 0) {
                 // Directory exists - clone succeeded
-                console.log("[CloneRepo] Clone succeeded, directory exists")
+                console.log("[CloneRepo] Clone succeeded! Setting success state")
                 setCloneSuccess(true)
+                console.log("[CloneRepo] Loading home folders...")
                 await loadHomeFolders(home)
+                console.log("[CloneRepo] Done!")
               } else {
+                console.log("[CloneRepo] Directory check failed - no data")
                 setCloneError("Clone failed - check repository URL and credentials")
               }
             } catch (e) {
