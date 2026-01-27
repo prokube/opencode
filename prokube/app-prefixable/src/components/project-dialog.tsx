@@ -173,12 +173,15 @@ export function ProjectDialog(props: ProjectDialogProps) {
 
     const targetPath = `${home}/${repoName}`.replace(/\/+/g, "/")
 
-    // Check if directory already exists
+    // Check if directory already exists - use global client to avoid directory context issues
+    console.log("[cloneRepo] Checking if directory exists:", targetPath)
     try {
-      await client.file.list({ path: targetPath })
+      const listResult = await global.file.list({ path: targetPath })
+      console.log("[cloneRepo] Directory exists:", listResult)
       setCloneError(`Directory '${repoName}' already exists. Please remove it first or choose a different repository.`)
       return
-    } catch {
+    } catch (e) {
+      console.log("[cloneRepo] Directory does not exist (good):", e)
       // Directory doesn't exist - good to proceed
     }
 
@@ -216,7 +219,7 @@ export function ProjectDialog(props: ProjectDialogProps) {
 
         // Check if clone succeeded by checking if directory exists
         try {
-          await client.file.list({ path: targetPath })
+          await global.file.list({ path: targetPath })
           // Directory exists - clone succeeded
           setCloneSuccess(true)
           await loadHomeFolders(home)
