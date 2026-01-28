@@ -351,29 +351,29 @@ export function Session() {
         const status = statuses[id]
         console.log("[Session] Status for", id, ":", status?.type)
 
-        // Only consider complete if we have a status and it's idle
-        // If status is undefined, the session might still be starting
-        if (status && status.type === "idle") {
-          console.log("[Session] Complete, reloading messages...")
-          await loadMessages(id)
+        // If session has a busy/retry status, continue polling
+        if (status && (status.type === "busy" || status.type === "retry")) {
+          continue
+        }
+
+        // Session is idle (either explicit idle or not in list - backend removes idle sessions)
+        // Check if we have an assistant response
+        console.log("[Session] Status idle or not found, checking messages...")
+        await loadMessages(id)
+
+        // Check if there's an assistant message (not just the user message we added)
+        const msgs = messages()
+        const hasAssistantResponse = msgs.some((m) => m.role === "assistant")
+
+        if (hasAssistantResponse) {
+          console.log("[Session] Complete, found assistant response")
           setProcessing(false)
           return
         }
 
-        // If processing/running, continue polling
-        if (status && (status.type === "running" || status.type === "processing")) {
-          continue
-        }
-
-        // If no status after a few tries, assume it's done
-        if (i > 5 && !status) {
-          console.log("[Session] No status after retries, checking messages...")
-          await loadMessages(id)
-          if (messages().length > 1) {
-            // Got a response
-            setProcessing(false)
-            return
-          }
+        // No assistant response yet - if we've been waiting a while, might be an error
+        if (i > 10) {
+          console.log("[Session] Long wait without response, might be stuck")
         }
       } catch (e) {
         console.error("[Session] Status check failed:", e)
