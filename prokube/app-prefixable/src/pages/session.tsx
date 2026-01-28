@@ -342,7 +342,7 @@ export function Session() {
 
       try {
         const res = await client.session.status({})
-        console.log("[Session] Status response:", res.data)
+        console.log("[Session] Status poll", i, "- response:", res.data)
         const statuses = res.data as Record<string, { type: string }> | undefined
         if (!statuses || typeof statuses !== "object") {
           console.log("[Session] No statuses yet, continuing...")
@@ -357,37 +357,28 @@ export function Session() {
           continue
         }
 
-        // Session is idle - SSE events should have already updated the messages
-        console.log("[Session] Status idle or not found - SSE should have streamed the response")
+        // Session is idle or not found - load messages
+        console.log("[Session] Status idle/not found, loading messages...")
+        await loadMessages(id)
 
-        // Check if there's an assistant message (should be there from SSE events)
         const msgs = messages()
         const hasAssistantResponse = msgs.some((m) => m.role === "assistant")
 
         if (hasAssistantResponse) {
-          console.log("[Session] Complete, found assistant response from SSE")
+          console.log("[Session] Complete, found", msgs.length, "messages")
           setProcessing(false)
           return
         }
 
-        // No assistant response yet - SSE might not be working, load messages as fallback
-        if (i > 10) {
-          console.log("[Session] No SSE response after 5s, loading messages as fallback")
-          await loadMessages(id)
-          const msgsAfterLoad = messages()
-          if (msgsAfterLoad.some((m) => m.role === "assistant")) {
-            console.log("[Session] Complete after fallback load")
-            setProcessing(false)
-            return
-          }
-        }
+        // No assistant response yet - might be an error or still processing
+        console.log("[Session] No assistant response yet after", i, "polls")
       } catch (e) {
         console.error("[Session] Status check failed:", e)
       }
     }
 
-    // Timeout - reload as final fallback
-    console.log("[Session] Timeout, reloading messages as final fallback...")
+    // Timeout - reload anyway
+    console.log("[Session] Timeout after 120 polls, reloading messages...")
     await loadMessages(id)
     setProcessing(false)
   }
