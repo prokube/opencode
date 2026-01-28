@@ -526,10 +526,28 @@ export function Session() {
     }
   }
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom when messages change or processing state changes
+  function scrollToBottom() {
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      messagesEndRef?.scrollIntoView({ behavior: "smooth" })
+    })
+  }
+
   createEffect(() => {
-    messages()
-    messagesEndRef?.scrollIntoView({ behavior: "smooth" })
+    // Track messages - this triggers on any message update including part updates
+    const msgs = messages()
+    // Also track processing state to scroll when "Thinking..." appears
+    const isProcessing = processing()
+    // Track pending questions to scroll when question prompt appears
+    const question = pendingQuestion()
+    scrollToBottom()
+  })
+
+  // Also scroll on initial load
+  onMount(() => {
+    // Scroll after a short delay to ensure content is rendered
+    setTimeout(scrollToBottom, 100)
   })
 
   // Focus input on mount
