@@ -228,3 +228,4 @@ When ending a work session:
 1. **Commit changes**: Stage specific files, commit with clear message
 2. **Ask before pushing**: Only push if user confirms or explicitly requests it
 3. **Provide context**: Summarize what was done and what's next
+
