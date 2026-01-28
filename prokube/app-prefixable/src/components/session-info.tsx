@@ -19,22 +19,10 @@ export function SessionInfo(props: SessionInfoProps) {
   const [gitBranch, setGitBranch] = createSignal<string | null>(null)
   const [messages, setMessages] = createSignal<any[]>([])
 
-  // Load git branch
+  // Load git branch - disabled for now, no bash endpoint in SDK
   async function loadGitBranch() {
-    if (!directory) return
-    try {
-      const res = await client.bash.run({
-        command: "git branch --show-current",
-        directory,
-      })
-      if (res.data?.stdout) {
-        const branch = res.data.stdout.trim()
-        if (branch) setGitBranch(branch)
-      }
-    } catch (e) {
-      // Git might not be available or not a git repo - that's fine
-      console.debug("Git branch not available:", e)
-    }
+    // TODO: Add git branch endpoint to SDK or use a different approach
+    // The bash.run endpoint doesn't exist in the current SDK
   }
 
   // Load messages to calculate token usage

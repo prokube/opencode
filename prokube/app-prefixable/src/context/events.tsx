@@ -2,6 +2,7 @@ import { createContext, useContext, onCleanup, type ParentProps } from "solid-js
 import { createStore } from "solid-js/store"
 import type { Event, SessionStatus } from "@opencode-ai/sdk/v2/client"
 import { useBasePath } from "./base-path"
+import { useSDK } from "./sdk"
 
 type EventHandler = (event: Event) => void
 
@@ -14,6 +15,7 @@ const EventContext = createContext<EventContextValue>()
 
 export function EventProvider(props: ParentProps) {
   const { prefix } = useBasePath()
+  const { directory } = useSDK()
   const handlers = new Set<EventHandler>()
   const [status, setStatus] = createStore<Record<string, SessionStatus>>({})
 
@@ -24,8 +26,9 @@ export function EventProvider(props: ParentProps) {
   function connect() {
     if (eventSource) return
 
-    // Use prefixed path so it goes through the proxy correctly
-    const eventUrl = prefix("/event")
+    // Use prefixed path with directory parameter so events are scoped to the correct instance
+    const dirParam = directory ? `?directory=${encodeURIComponent(directory)}` : ""
+    const eventUrl = prefix(`/event${dirParam}`)
     eventSource = new EventSource(eventUrl)
     console.log("[Events] Connecting to SSE:", eventUrl)
 
