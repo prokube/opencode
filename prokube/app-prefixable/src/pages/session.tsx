@@ -62,6 +62,7 @@ export function Session() {
   const [messages, setMessages] = createSignal<DisplayMessage[]>([])
   const [loading, setLoading] = createSignal(false)
   const [processing, setProcessing] = createSignal(false)
+  const [loadingHistory, setLoadingHistory] = createSignal(false)
   const [sessionId, setSessionId] = createSignal(params.id)
 
   // Keep sessionId in sync with URL params
@@ -70,9 +71,13 @@ export function Session() {
     console.log("[Session] URL param changed:", id)
     setSessionId(id)
     if (id) {
+      // Immediately clear old messages and show loading state
+      setMessages([])
+      setLoadingHistory(true)
       loadMessages(id)
     } else {
       setMessages([])
+      setLoadingHistory(false)
     }
   })
   const [showModelPicker, setShowModelPicker] = createSignal(false)
@@ -326,6 +331,8 @@ export function Session() {
       }
     } catch (e) {
       console.error("Failed to load messages:", e)
+    } finally {
+      setLoadingHistory(false)
     }
   }
 
@@ -1103,7 +1110,18 @@ export function Session() {
 
         {/* Messages */}
         <div class="flex-1 overflow-y-auto p-6 space-y-4" style={{ background: "var(--background-stronger)" }}>
-          <Show when={messages().length === 0 && !loading()}>
+          {/* Loading history indicator */}
+          <Show when={loadingHistory()}>
+            <div class="flex flex-col items-center justify-center h-full text-center">
+              <Spinner class="w-8 h-8 mb-4" />
+              <p class="text-lg" style={{ color: "var(--text-weak)" }}>
+                Loading chat history...
+              </p>
+            </div>
+          </Show>
+
+          {/* Empty state - only show when not loading */}
+          <Show when={messages().length === 0 && !loading() && !loadingHistory()}>
             <div class="flex flex-col items-center justify-center h-full text-center">
               <div
                 class="w-16 h-16 rounded-full flex items-center justify-center mb-4"
