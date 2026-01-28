@@ -71,6 +71,7 @@ const apiPaths = [
   "/log",
   "/instance",
   "/question",
+  "/find",
 ]
 
 function isApiPath(path: string): boolean {
