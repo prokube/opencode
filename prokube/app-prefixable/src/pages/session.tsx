@@ -357,32 +357,37 @@ export function Session() {
           continue
         }
 
-        // Session is idle (either explicit idle or not in list - backend removes idle sessions)
-        // Check if we have an assistant response
-        console.log("[Session] Status idle or not found, checking messages...")
-        await loadMessages(id)
+        // Session is idle - SSE events should have already updated the messages
+        console.log("[Session] Status idle or not found - SSE should have streamed the response")
 
-        // Check if there's an assistant message (not just the user message we added)
+        // Check if there's an assistant message (should be there from SSE events)
         const msgs = messages()
         const hasAssistantResponse = msgs.some((m) => m.role === "assistant")
 
         if (hasAssistantResponse) {
-          console.log("[Session] Complete, found assistant response")
+          console.log("[Session] Complete, found assistant response from SSE")
           setProcessing(false)
           return
         }
 
-        // No assistant response yet - if we've been waiting a while, might be an error
+        // No assistant response yet - SSE might not be working, load messages as fallback
         if (i > 10) {
-          console.log("[Session] Long wait without response, might be stuck")
+          console.log("[Session] No SSE response after 5s, loading messages as fallback")
+          await loadMessages(id)
+          const msgsAfterLoad = messages()
+          if (msgsAfterLoad.some((m) => m.role === "assistant")) {
+            console.log("[Session] Complete after fallback load")
+            setProcessing(false)
+            return
+          }
         }
       } catch (e) {
         console.error("[Session] Status check failed:", e)
       }
     }
 
-    // Timeout - reload anyway
-    console.log("[Session] Timeout, reloading messages...")
+    // Timeout - reload as final fallback
+    console.log("[Session] Timeout, reloading messages as final fallback...")
     await loadMessages(id)
     setProcessing(false)
   }
@@ -398,11 +403,22 @@ export function Session() {
       // Handle message part updates
       if (event.type === "message.part.updated") {
         const part = event.properties.part
+        console.log(
+          "[Session] Part update - sessionID:",
+          part.sessionID,
+          "current:",
+          id,
+          "matches:",
+          part.sessionID === id,
+        )
         if (part.sessionID !== id) return
 
+        console.log("[Session] Updating part:", part.id, "type:", part.type, "messageID:", part.messageID)
         setMessages((prev) => {
           const msgIndex = prev.findIndex((m) => m.id === part.messageID)
+          console.log("[Session] Current messages:", prev.length, "msgIndex:", msgIndex)
           if (msgIndex === -1) {
+            console.log("[Session] Creating new message with part")
             return [
               ...prev,
               {
@@ -417,6 +433,7 @@ export function Session() {
           const partIndex = msg.parts.findIndex((p) => p.id === part.id)
           const newParts =
             partIndex === -1 ? [...msg.parts, part] : msg.parts.map((p, i) => (i === partIndex ? part : p))
+          console.log("[Session] Updated parts count:", newParts.length, "partIndex:", partIndex)
 
           return prev.map((m, i) => (i === msgIndex ? { ...m, parts: newParts } : m))
         })
