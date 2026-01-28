@@ -11,6 +11,7 @@ import { MessageParts } from "../components/tool-part"
 import { MCPDialog } from "../components/mcp-dialog"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
 import { QuestionPrompt } from "../components/question-prompt"
+import { SessionInfo } from "../components/session-info"
 import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -1321,70 +1322,8 @@ export function Session() {
                   </Show>
                 </div>
 
-                {/* Model/Agent indicator inside input box */}
-                <div class="flex items-center gap-3 px-4 py-1.5 text-xs" style={{ color: "var(--text-weak)" }}>
-                  <Show when={providers.selectedAgent}>
-                    <span class="flex items-center gap-1">
-                      <span class="opacity-60">Agent:</span>
-                      <span class="capitalize" style={{ color: "var(--text-base)" }}>
-                        {providers.selectedAgent}
-                      </span>
-                    </span>
-                  </Show>
-                  <Show when={providers.selectedModel}>
-                    {(model) => (
-                      <span class="flex items-center gap-1">
-                        <span class="opacity-60">Model:</span>
-                        <span style={{ color: "var(--text-base)" }}>{model().modelID}</span>
-                      </span>
-                    )}
-                  </Show>
-                  <Show when={!providers.selectedModel && providers.connected.length === 0}>
-                    <a
-                      href={`/${dirSlug()}/settings`}
-                      style={{ color: "var(--text-interactive-base)" }}
-                      class="hover:underline"
-                    >
-                      Connect a provider to start
-                    </a>
-                  </Show>
-                  <Show when={!providers.selectedModel && providers.connected.length > 0}>
-                    <span style={{ color: "var(--status-warning-text)" }}>No model selected</span>
-                  </Show>
-
-                  {/* Enter hint / Stop button - pushed to right */}
-                  <div class="ml-auto flex items-center">
-                    <Show
-                      when={processing()}
-                      fallback={
-                        <Show when={input().trim() && !loading()}>
-                          <span class="flex items-center gap-1 opacity-50" title="Press Enter to send">
-                            <span
-                              class="font-mono text-[10px] px-1 py-0.5 rounded"
-                              style={{ background: "var(--surface-inset)" }}
-                            >
-                              Enter
-                            </span>
-                            <CornerDownLeft class="w-3 h-3" />
-                          </span>
-                        </Show>
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={handleAbort}
-                        class="flex items-center gap-1 px-2 py-0.5 rounded transition-colors"
-                        style={{
-                          background: "var(--status-danger-dim)",
-                          color: "var(--status-danger-text)",
-                        }}
-                      >
-                        <Square class="w-2.5 h-2.5" style={{ fill: "currentColor" }} />
-                        <span>Stop</span>
-                      </button>
-                    </Show>
-                  </div>
-                </div>
+                {/* Session info: Git branch, Agent, Model, Token usage */}
+                <SessionInfo input={input} loading={loading} processing={processing} onAbort={handleAbort} />
               </div>
             </form>
           </div>
