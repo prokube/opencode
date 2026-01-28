@@ -148,7 +148,7 @@ export function Session() {
         setModelIndex(0)
         setShowModelPicker(true)
         // Focus filter input after popup opens
-        setTimeout(() => modelFilterRef?.focus(), 50)
+        requestAnimationFrame(() => setTimeout(() => modelFilterRef?.focus(), 0))
       },
     },
     {
@@ -162,7 +162,7 @@ export function Session() {
         setAgentIndex(0)
         setShowAgentPicker(true)
         // Focus filter input after popup opens
-        setTimeout(() => agentFilterRef?.focus(), 50)
+        requestAnimationFrame(() => setTimeout(() => agentFilterRef?.focus(), 0))
       },
     },
     {
@@ -814,7 +814,7 @@ export function Session() {
                     setAgentFilter("")
                     setAgentIndex(0)
                     setShowAgentPicker(true)
-                    setTimeout(() => agentFilterRef?.focus(), 50)
+                    requestAnimationFrame(() => setTimeout(() => agentFilterRef?.focus(), 0))
                   } else {
                     setShowAgentPicker(false)
                   }
@@ -936,7 +936,10 @@ export function Session() {
                     setModelFilter("")
                     setModelIndex(0)
                     setShowModelPicker(true)
-                    setTimeout(() => modelFilterRef?.focus(), 50)
+                    // Use requestAnimationFrame + setTimeout for reliable focus
+                    requestAnimationFrame(() => {
+                      setTimeout(() => modelFilterRef?.focus(), 0)
+                    })
                   } else {
                     setShowModelPicker(false)
                   }
