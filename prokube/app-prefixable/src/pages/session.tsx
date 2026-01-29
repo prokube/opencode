@@ -316,9 +316,15 @@ export function Session() {
 
       if (isSimpleCommand || isModelOrAgentFilter) {
         console.log("[Session] Slash match:", query)
+        const prevQuery = slashQuery()
         setSlashQuery(query)
         setShowSlashPopover(true)
-        setSlashIndex(0)
+        // Only reset index if the base command changed, not just the filter
+        const prevBase = prevQuery.split(/[\s:]/)[0]
+        const newBase = query.split(/[\s:]/)[0]
+        if (prevBase !== newBase) {
+          setSlashIndex(0)
+        }
       } else {
         setShowSlashPopover(false)
         setSlashQuery("")
