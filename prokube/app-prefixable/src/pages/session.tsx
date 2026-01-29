@@ -15,7 +15,7 @@ import { SessionInfo } from "../components/session-info"
 import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
-import { Plus, Settings, ChevronDown, MessageCircle, Square, CornerDownLeft } from "lucide-solid"
+import { Plus, Settings, MessageCircle, Square, CornerDownLeft } from "lucide-solid"
 
 interface Command {
   id: string
@@ -80,8 +80,6 @@ export function Session() {
       setLoadingHistory(false)
     }
   })
-  const [showModelPicker, setShowModelPicker] = createSignal(false)
-  const [showAgentPicker, setShowAgentPicker] = createSignal(false)
   const [showSlashPopover, setShowSlashPopover] = createSignal(false)
   const [slashQuery, setSlashQuery] = createSignal("")
   const [slashIndex, setSlashIndex] = createSignal(0)
@@ -90,34 +88,10 @@ export function Session() {
   const [error, setError] = createSignal<string | null>(null)
   const [pendingQuestion, setPendingQuestion] = createSignal<QuestionRequest | null>(null)
 
-  // Model picker state
-  const [modelFilter, setModelFilter] = createSignal("")
-  const [modelIndex, setModelIndex] = createSignal(0)
-
-  // Agent picker state
-  const [agentFilter, setAgentFilter] = createSignal("")
-  const [agentIndex, setAgentIndex] = createSignal(0)
   let messagesEndRef: HTMLDivElement | undefined
   let inputRef: HTMLTextAreaElement | undefined
-  let agentPickerRef: HTMLDivElement | undefined
-  let modelPickerRef: HTMLDivElement | undefined
   let slashPopoverRef: HTMLDivElement | undefined
-  let modelFilterRef: HTMLInputElement | undefined
-  let agentFilterRef: HTMLInputElement | undefined
 
-  // Auto-focus picker inputs when they open
-  createEffect(() => {
-    if (showModelPicker()) {
-      // Use queueMicrotask to ensure DOM is updated
-      queueMicrotask(() => modelFilterRef?.focus())
-    }
-  })
-
-  createEffect(() => {
-    if (showAgentPicker()) {
-      queueMicrotask(() => agentFilterRef?.focus())
-    }
-  })
 
   // Base slash commands (static ones)
   const baseSlashCommands: Command[] = [
@@ -241,47 +215,10 @@ export function Session() {
     )
   })
 
-  // Filtered models for model picker
-  const filteredModels = createMemo(() => {
-    const filter = modelFilter().toLowerCase()
-    const result: { provider: { id: string; name: string }; model: { id: string; name: string } }[] = []
-
-    for (const provider of providers.providers.filter((p) => providers.connected.includes(p.id))) {
-      for (const model of Object.values(provider.models)) {
-        if (
-          !filter ||
-          model.name.toLowerCase().includes(filter) ||
-          model.id.toLowerCase().includes(filter) ||
-          provider.name.toLowerCase().includes(filter) ||
-          provider.id.toLowerCase().includes(filter)
-        ) {
-          result.push({ provider: { id: provider.id, name: provider.name }, model: { id: model.id, name: model.name } })
-        }
-      }
-    }
-    return result
-  })
-
-  // Filtered agents for agent picker
-  const filteredAgents = createMemo(() => {
-    const filter = agentFilter().toLowerCase()
-    if (!filter) return providers.agents
-    return providers.agents.filter((a) => a.name.toLowerCase().includes(filter))
-  })
-
-  // Close dropdowns on click outside
+  // Close slash popover on click outside
   function handleClickOutside(e: MouseEvent) {
     const target = e.target as Node
-
-    // Don't close if clicking inside the input (for slash commands)
     if (inputRef?.contains(target)) return
-
-    if (agentPickerRef && !agentPickerRef.contains(target)) {
-      setShowAgentPicker(false)
-    }
-    if (modelPickerRef && !modelPickerRef.contains(target)) {
-      setShowModelPicker(false)
-    }
     if (slashPopoverRef && !slashPopoverRef.contains(target)) {
       setShowSlashPopover(false)
     }
@@ -872,279 +809,8 @@ export function Session() {
             </Show>
           </div>
 
-          {/* Model & Agent Selectors */}
+          {/* Status indicators */}
           <div class="flex items-center gap-4">
-            {/* Agent Selector */}
-            <div class="relative" ref={agentPickerRef}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!showAgentPicker()) {
-                    setAgentFilter("")
-                    setAgentIndex(0)
-                    setShowAgentPicker(true)
-                    // Focus handled by createEffect
-                  } else {
-                    setShowAgentPicker(false)
-                  }
-                  setShowModelPicker(false)
-                }}
-                class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
-                style={{
-                  border: "1px solid var(--border-base)",
-                  color: "var(--text-base)",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <span class="capitalize">{providers.selectedAgent}</span>
-                <ChevronDown class="w-4 h-4" style={{ color: "var(--icon-weak)" }} />
-              </button>
-
-              <Show when={showAgentPicker()}>
-                <div
-                  class="absolute right-0 top-full mt-1 w-56 max-h-80 rounded-lg shadow-lg z-10 flex flex-col"
-                  style={{
-                    background: "var(--background-base)",
-                    border: "1px solid var(--border-base)",
-                  }}
-                >
-                  {/* Filter input */}
-                  <div
-                    class="p-2 sticky top-0"
-                    style={{ background: "var(--background-base)", "border-bottom": "1px solid var(--border-base)" }}
-                  >
-                    <input
-                      ref={agentFilterRef}
-                      type="text"
-                      placeholder="Type to filter agents..."
-                      value={agentFilter()}
-                      onInput={(e) => {
-                        setAgentFilter(e.currentTarget.value)
-                        setAgentIndex(0)
-                      }}
-                      onKeyDown={(e) => {
-                        const agents = filteredAgents()
-                        if (e.key === "ArrowDown") {
-                          e.preventDefault()
-                          setAgentIndex((i) => (i + 1) % agents.length)
-                        } else if (e.key === "ArrowUp") {
-                          e.preventDefault()
-                          setAgentIndex((i) => (i - 1 + agents.length) % agents.length)
-                        } else if (e.key === "Enter") {
-                          e.preventDefault()
-                          const agent = agents[agentIndex()]
-                          if (agent) {
-                            providers.setSelectedAgent(agent.name)
-                            setShowAgentPicker(false)
-                          }
-                        } else if (e.key === "Escape") {
-                          e.preventDefault()
-                          setShowAgentPicker(false)
-                        }
-                      }}
-                      class="w-full px-3 py-2 text-sm rounded-md focus:outline-none focus:ring-2"
-                      style={
-                        {
-                          background: "var(--surface-inset)",
-                          border: "1px solid var(--border-base)",
-                          color: "var(--text-base)",
-                          "--tw-ring-color": "var(--interactive-base)",
-                        } as any
-                      }
-                    />
-                  </div>
-
-                  {/* Agent list */}
-                  <div class="overflow-y-auto flex-1">
-                    <Show when={filteredAgents().length === 0}>
-                      <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
-                        {providers.agents.length === 0 ? "No agents available" : `No agents match "${agentFilter()}"`}
-                      </div>
-                    </Show>
-
-                    <For each={filteredAgents()}>
-                      {(agent, idx) => {
-                        const selected = providers.selectedAgent === agent.name
-                        const highlighted = idx() === agentIndex()
-                        return (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              providers.setSelectedAgent(agent.name)
-                              setShowAgentPicker(false)
-                            }}
-                            class="w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between"
-                            style={{
-                              color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
-                              background: highlighted ? "var(--surface-inset)" : "transparent",
-                            }}
-                            onMouseEnter={() => setAgentIndex(idx())}
-                          >
-                            <span class="capitalize">{agent.name}</span>
-                            <Show when={selected}>
-                              <div class="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--surface-inset)" }}>
-                                active
-                              </div>
-                            </Show>
-                          </button>
-                        )
-                      }}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-            </div>
-
-            {/* Model Selector */}
-            <div class="relative" ref={modelPickerRef}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!showModelPicker()) {
-                    setModelFilter("")
-                    setModelIndex(0)
-                    setShowModelPicker(true)
-                    // Use requestAnimationFrame + setTimeout for reliable focus
-                    requestAnimationFrame(() => {
-                      setTimeout(() => modelFilterRef?.focus(), 0)
-                    })
-                  } else {
-                    setShowModelPicker(false)
-                  }
-                  setShowAgentPicker(false)
-                }}
-                class="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors"
-                style={{
-                  border: "1px solid var(--border-base)",
-                  color: "var(--text-base)",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-inset)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <span>
-                  {providers.selectedModel
-                    ? `${providers.selectedModel.providerID}/${providers.selectedModel.modelID}`
-                    : "Select model"}
-                </span>
-                <ChevronDown class="w-4 h-4" style={{ color: "var(--icon-weak)" }} />
-              </button>
-
-              <Show when={showModelPicker()}>
-                <div
-                  class="absolute right-0 top-full mt-1 w-80 max-h-96 rounded-lg shadow-lg z-10 flex flex-col"
-                  style={{
-                    background: "var(--background-base)",
-                    border: "1px solid var(--border-base)",
-                  }}
-                >
-                  {/* Filter input */}
-                  <div
-                    class="p-2 sticky top-0"
-                    style={{ background: "var(--background-base)", "border-bottom": "1px solid var(--border-base)" }}
-                  >
-                    <input
-                      ref={modelFilterRef}
-                      type="text"
-                      placeholder="Type to filter models..."
-                      value={modelFilter()}
-                      onInput={(e) => {
-                        setModelFilter(e.currentTarget.value)
-                        setModelIndex(0)
-                      }}
-                      onKeyDown={(e) => {
-                        const models = filteredModels()
-                        if (e.key === "ArrowDown") {
-                          e.preventDefault()
-                          setModelIndex((i) => (i + 1) % models.length)
-                        } else if (e.key === "ArrowUp") {
-                          e.preventDefault()
-                          setModelIndex((i) => (i - 1 + models.length) % models.length)
-                        } else if (e.key === "Enter") {
-                          e.preventDefault()
-                          const item = models[modelIndex()]
-                          if (item) {
-                            providers.setSelectedModel({ providerID: item.provider.id, modelID: item.model.id })
-                            setShowModelPicker(false)
-                          }
-                        } else if (e.key === "Escape") {
-                          e.preventDefault()
-                          setShowModelPicker(false)
-                        }
-                      }}
-                      class="w-full px-3 py-2 text-sm rounded-md focus:outline-none focus:ring-2"
-                      style={
-                        {
-                          background: "var(--surface-inset)",
-                          border: "1px solid var(--border-base)",
-                          color: "var(--text-base)",
-                          "--tw-ring-color": "var(--interactive-base)",
-                        } as any
-                      }
-                    />
-                  </div>
-
-                  {/* Model list */}
-                  <div class="overflow-y-auto flex-1">
-                    <Show when={providers.connected.length === 0}>
-                      <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
-                        <p>No providers connected.</p>
-                        <a
-                          href={`/${dirSlug()}/settings`}
-                          style={{ color: "var(--text-interactive-base)" }}
-                          class="hover:underline"
-                        >
-                          Connect a provider
-                        </a>
-                      </div>
-                    </Show>
-
-                    <Show when={filteredModels().length === 0 && providers.connected.length > 0}>
-                      <div class="px-3 py-4 text-sm text-center" style={{ color: "var(--text-weak)" }}>
-                        No models match "{modelFilter()}"
-                      </div>
-                    </Show>
-
-                    <For each={filteredModels()}>
-                      {(item, idx) => {
-                        const selected =
-                          providers.selectedModel?.providerID === item.provider.id &&
-                          providers.selectedModel?.modelID === item.model.id
-                        const highlighted = idx() === modelIndex()
-                        return (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              providers.setSelectedModel({ providerID: item.provider.id, modelID: item.model.id })
-                              setShowModelPicker(false)
-                            }}
-                            class="w-full px-3 py-2 text-left text-sm transition-colors flex items-center justify-between"
-                            style={{
-                              color: selected ? "var(--text-interactive-base)" : "var(--text-base)",
-                              background: highlighted ? "var(--surface-inset)" : "transparent",
-                            }}
-                            onMouseEnter={() => setModelIndex(idx())}
-                          >
-                            <div>
-                              <div class="font-medium">{item.model.name}</div>
-                              <div class="text-xs" style={{ color: "var(--text-weak)" }}>
-                                {item.provider.name}
-                              </div>
-                            </div>
-                            <Show when={selected}>
-                              <div class="text-xs px-1.5 py-0.5 rounded" style={{ background: "var(--surface-inset)" }}>
-                                active
-                              </div>
-                            </Show>
-                          </button>
-                        )
-                      }}
-                    </For>
-                  </div>
-                </div>
-              </Show>
-            </div>
-
             {/* MCP Indicator */}
             <Show when={mcp.stats().total > 0}>
               <button

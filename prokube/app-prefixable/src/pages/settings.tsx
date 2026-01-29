@@ -4,7 +4,7 @@ import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
-import { Check, Copy, Plug, GitBranch, Server, Bot, ExternalLink, Key, Search, X, Plus, Trash2 } from "lucide-solid"
+import { Check, Copy, Plug, GitBranch, Server, ExternalLink, Key, Search, X, Plus, Trash2 } from "lucide-solid"
 
 export function Settings() {
   const providers = useProviders()
@@ -706,9 +706,7 @@ export function Settings() {
     { id: "providers", label: "Providers", icon: () => <Plug class="w-4 h-4" /> },
     { id: "git", label: "Git", icon: () => <GitBranch class="w-4 h-4" /> },
     { id: "mcp", label: "MCP Servers", icon: () => <Server class="w-4 h-4" /> },
-    // Models tab removed - model selection happens per-session, not globally
-    // { id: "models", label: "Models", icon: () => <Cpu class="w-4 h-4" /> },
-    { id: "agents", label: "Agents", icon: () => <Bot class="w-4 h-4" /> },
+    // Model/Agent selection happens via /model and /agent slash commands
   ]
 
   return (
@@ -1802,65 +1800,6 @@ export function Settings() {
             </div>
           </Show>
 
-          {/* Agents Tab */}
-          <Show when={activeTab() === "agents"}>
-            <div class="space-y-6">
-              <header>
-                <h1 class="text-lg font-medium" style={{ color: "var(--text-strong)" }}>
-                  Agents
-                </h1>
-                <p class="text-sm mt-1" style={{ color: "var(--text-weak)" }}>
-                  Available agents for different tasks
-                </p>
-              </header>
-
-              <section
-                class="rounded-lg overflow-hidden"
-                style={{
-                  background: "var(--background-base)",
-                  border: "1px solid var(--border-base)",
-                }}
-              >
-                <Show when={providers.agents.length === 0}>
-                  <div class="p-6 text-center">
-                    <p class="text-sm" style={{ color: "var(--text-weak)" }}>
-                      No agents available.
-                    </p>
-                  </div>
-                </Show>
-
-                <div class="p-2">
-                  <For each={providers.agents}>
-                    {(agent) => (
-                      <button
-                        class="w-full flex items-center justify-between px-3 py-2 rounded-md text-left transition-colors"
-                        style={{
-                          background: providers.selectedAgent === agent.name ? "var(--surface-inset)" : "transparent",
-                          color:
-                            providers.selectedAgent === agent.name
-                              ? "var(--text-interactive-base)"
-                              : "var(--text-base)",
-                        }}
-                        onClick={() => providers.setSelectedAgent(agent.name)}
-                        onMouseEnter={(e) => {
-                          if (providers.selectedAgent !== agent.name)
-                            e.currentTarget.style.background = "var(--surface-inset)"
-                        }}
-                        onMouseLeave={(e) => {
-                          if (providers.selectedAgent !== agent.name) e.currentTarget.style.background = "transparent"
-                        }}
-                      >
-                        <span class="text-sm font-medium capitalize">{agent.name}</span>
-                        <Show when={providers.selectedAgent === agent.name}>
-                          <Check class="w-4 h-4" />
-                        </Show>
-                      </button>
-                    )}
-                  </For>
-                </div>
-              </section>
-            </div>
-          </Show>
         </div>
       </div>
 
