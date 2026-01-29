@@ -1167,11 +1167,11 @@ export function Session() {
                       "overflow-y": "auto",
                     }}
                   />
-                  {/* Current agent indicator */}
-                  <Show when={!input() && !loading() && !processing() && providers.selectedAgent}>
-                    <div class="absolute right-3 top-3 text-xs flex items-center gap-1.5" style={{ color: "var(--text-weak)" }}>
-                      <span>Agent:</span>
-                      <span class="capitalize font-medium" style={{ color: "var(--text-base)" }}>{providers.selectedAgent}</span>
+                  {/* Slash command hint */}
+                  <Show when={!input() && !loading() && !processing()}>
+                    <div class="absolute right-3 top-3 text-xs" style={{ color: "var(--text-weak)" }}>
+                      <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>/</span>
+                      {" "}commands
                     </div>
                   </Show>
                 </div>
