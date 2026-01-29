@@ -282,12 +282,23 @@ export function Session() {
     setInput(value)
 
     // Detect slash command pattern: starts with / and is the only content
-    const slashMatch = value.match(/^\/(\S*)$/)
+    // Allow spaces/colons after model/agent for filtering (e.g. /model:claude, /model claude)
+    const slashMatch = value.match(/^\/(.*)$/)
     if (slashMatch) {
-      console.log("[Session] Slash match:", slashMatch[1])
-      setSlashQuery(slashMatch[1])
-      setShowSlashPopover(true)
-      setSlashIndex(0)
+      const query = slashMatch[1]
+      // Only show popover if it's a simple command or model/agent with filter
+      const isSimpleCommand = /^\S*$/.test(query) // No spaces
+      const isModelOrAgentFilter = /^(model|agent)([\s:].*)?$/i.test(query)
+
+      if (isSimpleCommand || isModelOrAgentFilter) {
+        console.log("[Session] Slash match:", query)
+        setSlashQuery(query)
+        setShowSlashPopover(true)
+        setSlashIndex(0)
+      } else {
+        setShowSlashPopover(false)
+        setSlashQuery("")
+      }
     } else {
       setShowSlashPopover(false)
       setSlashQuery("")
