@@ -1407,16 +1407,16 @@ export function Session() {
                             }}
                           >
                             <Show when={!isPickerMode && cmd.slash}>
-                              <span class="font-mono" style={{ color: isSelected() ? "rgb(147, 112, 219)" : "var(--text-interactive-base)" }}>
+                              <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
                                 /{cmd.slash}
                               </span>
                             </Show>
                             <div class="flex-1">
-                              <div class="font-medium" style={{ color: isSelected() ? "rgb(147, 112, 219)" : "var(--text-strong)" }}>
+                              <div class="font-medium" style={{ color: "var(--text-strong)" }}>
                                 {cmd.title}
                               </div>
                               <Show when={cmd.description}>
-                                <div class="text-xs" style={{ color: isSelected() ? "rgb(147, 112, 219)" : "var(--text-weak)" }}>
+                                <div class="text-xs" style={{ color: "var(--text-weak)" }}>
                                   {cmd.description}
                                 </div>
                               </Show>
