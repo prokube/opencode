@@ -1311,65 +1311,114 @@ export function Session() {
           <div class="relative w-full">
             {/* Slash Command Popover */}
             <Show when={showSlashPopover() && filteredSlashCommands().length > 0}>
-              <div
-                ref={slashPopoverRef}
-                class="absolute bottom-full left-0 mb-2 w-72 max-h-80 overflow-y-auto rounded-lg shadow-lg z-20"
-                style={{
-                  background: "var(--background-base)",
-                  border: "1px solid var(--border-base)",
-                }}
-              >
-                <div
-                  class="px-3 py-2 text-xs font-medium sticky top-0"
-                  style={{
-                    color: "var(--text-weak)",
-                    background: "var(--surface-inset)",
-                    "border-bottom": "1px solid var(--border-base)",
-                  }}
-                >
-                  {slashQuery().toLowerCase().startsWith("model")
-                    ? "Models"
-                    : slashQuery().toLowerCase().startsWith("agent")
-                      ? "Agents"
-                      : "Commands"}
-                </div>
-                <For each={filteredSlashCommands()}>
-                  {(cmd, idx) => (
-                    <button
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        selectSlashCommand(cmd)
-                      }}
-                      class="w-full px-3 py-2 text-left text-sm flex items-start gap-3 transition-colors"
+              {(() => {
+                const isModelMode = slashQuery().toLowerCase().startsWith("model")
+                const isAgentMode = slashQuery().toLowerCase().startsWith("agent")
+                const isPickerMode = isModelMode || isAgentMode
+                const filterText = isModelMode
+                  ? slashQuery().slice(5).replace(/^[\s:]/, "")
+                  : isAgentMode
+                    ? slashQuery().slice(5).replace(/^[\s:]/, "")
+                    : ""
+
+                return (
+                  <div
+                    ref={slashPopoverRef}
+                    class="absolute bottom-full left-0 mb-2 w-80 max-h-96 rounded-lg shadow-lg z-20 flex flex-col"
+                    style={{
+                      background: "var(--background-base)",
+                      border: "1px solid var(--border-base)",
+                    }}
+                  >
+                    {/* Header with optional search */}
+                    <div
+                      class="px-3 py-2 text-xs font-medium sticky top-0"
                       style={{
-                        background: idx() === slashIndex() ? "var(--surface-inset)" : "transparent",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (idx() !== slashIndex()) e.currentTarget.style.background = "var(--surface-inset)"
-                      }}
-                      onMouseLeave={(e) => {
-                        if (idx() !== slashIndex()) e.currentTarget.style.background = "transparent"
+                        color: "var(--text-weak)",
+                        background: "var(--surface-inset)",
+                        "border-bottom": "1px solid var(--border-base)",
                       }}
                     >
-                      <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
-                        /{cmd.slash}
-                      </span>
-                      <div class="flex-1">
-                        <div class="font-medium" style={{ color: "var(--text-strong)" }}>
-                          {cmd.title}
-                        </div>
-                        <Show when={cmd.description}>
-                          <div class="text-xs" style={{ color: "var(--text-weak)" }}>
-                            {cmd.description}
-                          </div>
+                      <div class="flex items-center justify-between">
+                        <span>{isModelMode ? "Select Model" : isAgentMode ? "Select Agent" : "Commands"}</span>
+                        <Show when={isPickerMode}>
+                          <span class="text-[10px] opacity-60">↑↓ navigate · Enter select · Esc close</span>
                         </Show>
                       </div>
-                    </button>
-                  )}
-                </For>
-              </div>
+                      <Show when={isPickerMode}>
+                        <div class="mt-2 relative">
+                          <input
+                            type="text"
+                            placeholder={isModelMode ? "Filter models..." : "Filter agents..."}
+                            value={filterText}
+                            onInput={(e) => {
+                              const base = isModelMode ? "model " : "agent "
+                              setInput("/" + base + e.currentTarget.value)
+                              setSlashQuery(base + e.currentTarget.value)
+                            }}
+                            onKeyDown={(e) => {
+                              // Let the main input handler deal with navigation
+                              if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === "Escape") {
+                                e.preventDefault()
+                                handleInputKeyDown(e)
+                              }
+                            }}
+                            class="w-full px-2 py-1.5 text-sm rounded focus:outline-none focus:ring-1"
+                            style={{
+                              background: "var(--background-base)",
+                              border: "1px solid var(--border-base)",
+                              color: "var(--text-base)",
+                            }}
+                            autofocus
+                          />
+                        </div>
+                      </Show>
+                    </div>
+
+                    {/* List */}
+                    <div class="overflow-y-auto flex-1">
+                      <For each={filteredSlashCommands()}>
+                        {(cmd, idx) => (
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              selectSlashCommand(cmd)
+                            }}
+                            class="w-full px-3 py-2 text-left text-sm flex items-start gap-3 transition-colors"
+                            style={{
+                              background: idx() === slashIndex() ? "var(--surface-inset)" : "transparent",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (idx() !== slashIndex()) e.currentTarget.style.background = "var(--surface-inset)"
+                            }}
+                            onMouseLeave={(e) => {
+                              if (idx() !== slashIndex()) e.currentTarget.style.background = "transparent"
+                            }}
+                          >
+                            <Show when={!isPickerMode && cmd.slash}>
+                              <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
+                                /{cmd.slash}
+                              </span>
+                            </Show>
+                            <div class="flex-1">
+                              <div class="font-medium" style={{ color: "var(--text-strong)" }}>
+                                {cmd.title}
+                              </div>
+                              <Show when={cmd.description}>
+                                <div class="text-xs" style={{ color: "var(--text-weak)" }}>
+                                  {cmd.description}
+                                </div>
+                              </Show>
+                            </div>
+                          </button>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                )
+              })()}
             </Show>
 
             {/* Error message */}
