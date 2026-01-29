@@ -1157,7 +1157,7 @@ export function Session() {
                         if (form) form.requestSubmit()
                       }
                     }}
-                    placeholder="Type a message or / for commands..."
+                    placeholder="Type a message... (Tab to switch agent, / for commands)"
                     rows={1}
                     class="w-full px-4 py-3 focus:outline-none resize-none bg-transparent"
                     style={{
@@ -1167,17 +1167,11 @@ export function Session() {
                       "overflow-y": "auto",
                     }}
                   />
-                  {/* Hints */}
-                  <Show when={!input() && !loading() && !processing()}>
-                    <div class="absolute right-3 top-3 text-xs flex items-center gap-3" style={{ color: "var(--text-weak)" }}>
-                      <span class="flex items-center gap-1">
-                        <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>Tab</span>
-                        <span class="capitalize">{providers.selectedAgent}</span>
-                      </span>
-                      <span class="flex items-center gap-1">
-                        <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>/</span>
-                        commands
-                      </span>
+                  {/* Current agent indicator */}
+                  <Show when={!input() && !loading() && !processing() && providers.selectedAgent}>
+                    <div class="absolute right-3 top-3 text-xs flex items-center gap-1.5" style={{ color: "var(--text-weak)" }}>
+                      <span>Agent:</span>
+                      <span class="capitalize font-medium" style={{ color: "var(--text-base)" }}>{providers.selectedAgent}</span>
                     </div>
                   </Show>
                 </div>

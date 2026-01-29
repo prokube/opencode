@@ -206,9 +206,8 @@ export function ProviderProvider(props: ParentProps) {
       return authData() ?? {}
     },
     get agents() {
-      // Filter to show only useful agents: build, general, explore
-      const allowedAgents = ["build", "general", "explore"]
-      return (agentsData() ?? []).filter((a) => allowedAgents.includes(a.name) && !a.hidden)
+      // Show all non-hidden agents from backend
+      return (agentsData() ?? []).filter((a) => !a.hidden)
     },
     get loading() {
       return providerData.loading || agentsData.loading
