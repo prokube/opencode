@@ -1137,6 +1137,19 @@ export function Session() {
                         handleInputKeyDown(e)
                         return
                       }
+                      // Tab to cycle agents (when input is empty)
+                      if (e.key === "Tab" && !input().trim()) {
+                        e.preventDefault()
+                        const agents = providers.agents
+                        if (agents.length > 1) {
+                          const currentIdx = agents.findIndex((a) => a.name === providers.selectedAgent)
+                          const nextIdx = e.shiftKey
+                            ? (currentIdx - 1 + agents.length) % agents.length
+                            : (currentIdx + 1) % agents.length
+                          providers.setSelectedAgent(agents[nextIdx].name)
+                        }
+                        return
+                      }
                       // Enter to submit (without shift), Shift+Enter for newline
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault()
@@ -1154,14 +1167,17 @@ export function Session() {
                       "overflow-y": "auto",
                     }}
                   />
-                  {/* Hint for slash commands */}
+                  {/* Hints */}
                   <Show when={!input() && !loading() && !processing()}>
-                    <div class="absolute right-3 top-3 text-xs" style={{ color: "var(--text-weak)" }}>
-                      Type{" "}
-                      <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>
-                        /
-                      </span>{" "}
-                      for commands
+                    <div class="absolute right-3 top-3 text-xs flex items-center gap-3" style={{ color: "var(--text-weak)" }}>
+                      <span class="flex items-center gap-1">
+                        <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>Tab</span>
+                        <span class="capitalize">{providers.selectedAgent}</span>
+                      </span>
+                      <span class="flex items-center gap-1">
+                        <span class="font-mono px-1 rounded" style={{ background: "var(--surface-inset)" }}>/</span>
+                        commands
+                      </span>
                     </div>
                   </Show>
                 </div>
