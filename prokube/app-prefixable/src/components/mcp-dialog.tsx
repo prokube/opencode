@@ -1,6 +1,7 @@
 import { createSignal, createMemo, Show, For } from "solid-js"
 import { useMCP } from "../context/mcp"
 import { X, Plus } from "lucide-solid"
+import { Button } from "./ui/button"
 
 interface Props {
   onClose: () => void
@@ -196,19 +197,10 @@ export function MCPDialog(props: Props) {
 
         {/* Footer */}
         <div class="px-4 py-3" style={{ "border-top": "1px solid var(--border-base)" }}>
-          <button
-            onClick={props.onAddServer}
-            class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-            style={{
-              background: "var(--interactive-base)",
-              color: "white",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-          >
+          <Button onClick={props.onAddServer} variant="secondary" class="w-full">
             <Plus class="w-4 h-4" />
             Add MCP Server
-          </button>
+          </Button>
         </div>
       </div>
     </div>

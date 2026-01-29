@@ -10,20 +10,25 @@ interface ButtonProps extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
  * - White background with gray border
  * - Purple accent on hover
  * - Rounded corners
+ * - NO solid purple backgrounds
  */
 export function Button(props: ButtonProps) {
   const [local, rest] = splitProps(props, ["variant", "size", "class", "children"])
 
   const baseClasses =
-    "inline-flex items-center justify-center gap-2 font-medium rounded-xl border-2 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+    "inline-flex items-center justify-center gap-2 font-medium rounded-xl border-2 transition-all focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
 
   const variantClasses = {
+    // Primary: white bg, purple text, purple hover
     primary:
-      "bg-purple-600 border-purple-600 text-white hover:bg-purple-700 hover:border-purple-700 hover:shadow-md",
+      "bg-white border-gray-200 text-purple-700 hover:border-purple-500 hover:bg-purple-50 hover:shadow-md",
+    // Secondary: white bg, gray text, purple hover
     secondary:
       "bg-white border-gray-200 text-gray-900 hover:border-purple-500 hover:bg-purple-50 hover:text-purple-700 hover:shadow-md",
+    // Ghost: transparent, purple hover
     ghost:
       "bg-transparent border-transparent text-gray-700 hover:bg-purple-50 hover:text-purple-700",
+    // Danger: white bg, red text, red hover
     danger:
       "bg-white border-gray-200 text-red-600 hover:border-red-500 hover:bg-red-50 hover:text-red-700 hover:shadow-md",
   }
