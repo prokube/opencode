@@ -1416,7 +1416,7 @@ export function Session() {
                                 {cmd.title}
                               </div>
                               <Show when={cmd.description}>
-                                <div class="text-xs" style={{ color: isSelected() ? "rgba(147, 112, 219, 0.8)" : "var(--text-weak)" }}>
+                                <div class="text-xs" style={{ color: isSelected() ? "rgb(147, 112, 219)" : "var(--text-weak)" }}>
                                   {cmd.description}
                                 </div>
                               </Show>
