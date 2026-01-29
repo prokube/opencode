@@ -151,8 +151,32 @@ export function Session() {
         navigate(`/${dirSlug()}/settings`)
       },
     },
-    // Note: /model and /agent are handled dynamically in filteredSlashCommands
-    // to show inline model/agent selection
+    {
+      id: "model.choose",
+      title: "Choose Model",
+      description: "Select the AI model to use",
+      slash: "model",
+      onSelect: () => {
+        // Set input to "/model " to trigger inline model selection
+        setInput("/model ")
+        setSlashQuery("model ")
+        setShowSlashPopover(true)
+        setSlashIndex(0)
+      },
+    },
+    {
+      id: "agent.choose",
+      title: "Choose Agent",
+      description: "Select the agent to use",
+      slash: "agent",
+      onSelect: () => {
+        // Set input to "/agent " to trigger inline agent selection
+        setInput("/agent ")
+        setSlashQuery("agent ")
+        setShowSlashPopover(true)
+        setSlashIndex(0)
+      },
+    },
     {
       id: "mcp.manage",
       title: "MCP Servers",
