@@ -105,6 +105,20 @@ export function Session() {
   let modelFilterRef: HTMLInputElement | undefined
   let agentFilterRef: HTMLInputElement | undefined
 
+  // Auto-focus picker inputs when they open
+  createEffect(() => {
+    if (showModelPicker()) {
+      // Use queueMicrotask to ensure DOM is updated
+      queueMicrotask(() => modelFilterRef?.focus())
+    }
+  })
+
+  createEffect(() => {
+    if (showAgentPicker()) {
+      queueMicrotask(() => agentFilterRef?.focus())
+    }
+  })
+
   // Base slash commands (static ones)
   const baseSlashCommands: Command[] = [
     {
@@ -148,7 +162,7 @@ export function Session() {
         setModelIndex(0)
         setShowModelPicker(true)
         // Focus filter input after popup opens
-        requestAnimationFrame(() => setTimeout(() => modelFilterRef?.focus(), 0))
+        // Focus handled by createEffect
       },
     },
     {
@@ -162,7 +176,7 @@ export function Session() {
         setAgentIndex(0)
         setShowAgentPicker(true)
         // Focus filter input after popup opens
-        requestAnimationFrame(() => setTimeout(() => agentFilterRef?.focus(), 0))
+        // Focus handled by createEffect
       },
     },
     {
@@ -814,7 +828,7 @@ export function Session() {
                     setAgentFilter("")
                     setAgentIndex(0)
                     setShowAgentPicker(true)
-                    requestAnimationFrame(() => setTimeout(() => agentFilterRef?.focus(), 0))
+                    // Focus handled by createEffect
                   } else {
                     setShowAgentPicker(false)
                   }
