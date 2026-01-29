@@ -1,6 +1,7 @@
 import { createSignal, Show, For } from "solid-js"
 import { useMCP, type McpLocalConfig, type McpRemoteConfig } from "../context/mcp"
 import { X, ChevronLeft, ChevronRight } from "lucide-solid"
+import { Button } from "./ui/button"
 
 interface Props {
   onClose: () => void
@@ -222,28 +223,22 @@ export function MCPAddDialog(props: Props) {
         <form onSubmit={handleSubmit} class="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Type Selector */}
           <div class="flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={() => setType("remote")}
-              class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              style={{
-                background: type() === "remote" ? "var(--interactive-base)" : "var(--surface-inset)",
-                color: type() === "remote" ? "white" : "var(--text-base)",
-              }}
+              variant={type() === "remote" ? "primary" : "secondary"}
+              class="flex-1"
             >
               Remote (URL)
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setType("local")}
-              class="flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              style={{
-                background: type() === "local" ? "var(--interactive-base)" : "var(--surface-inset)",
-                color: type() === "local" ? "white" : "var(--text-base)",
-              }}
+              variant={type() === "local" ? "primary" : "secondary"}
+              class="flex-1"
             >
               Local (Command)
-            </button>
+            </Button>
           </div>
 
           {/* Name Field */}
@@ -525,17 +520,9 @@ export function MCPAddDialog(props: Props) {
           </Show>
 
           {/* Submit */}
-          <button
-            type="submit"
-            disabled={loading()}
-            class="w-full px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
-            style={{
-              background: "var(--interactive-base)",
-              color: "white",
-            }}
-          >
+          <Button type="submit" disabled={loading()} variant="primary" class="w-full">
             {loading() ? "Adding..." : "Add Server"}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

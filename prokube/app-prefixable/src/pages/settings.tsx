@@ -4,6 +4,7 @@ import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
 import { useSDK } from "../context/sdk"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
+import { Button } from "../components/ui/button"
 import { Check, Copy, Plug, GitBranch, Server, ExternalLink, Key, Search, X, Plus, Trash2 } from "lucide-solid"
 
 export function Settings() {
@@ -1287,51 +1288,23 @@ export function Settings() {
                       </Show>
 
                       <div class="flex gap-2 flex-wrap">
-                        <button
-                          onClick={loadSshKeys}
-                          class="px-3 py-1.5 rounded text-sm transition-colors"
-                          style={{
-                            background: "var(--surface-inset)",
-                            color: "var(--text-base)",
-                          }}
-                        >
+                        <Button onClick={loadSshKeys} variant="secondary" size="sm">
                           Refresh
-                        </button>
-                        <button
-                          onClick={openAddKeyDialog}
-                          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors"
-                          style={{
-                            background: "var(--surface-inset)",
-                            color: "var(--text-base)",
-                          }}
-                        >
+                        </Button>
+                        <Button onClick={openAddKeyDialog} variant="secondary" size="sm">
                           <Plus class="w-3.5 h-3.5" />
                           Add Existing Key
-                        </button>
-                        <button
-                          onClick={generateSshKey}
-                          disabled={sshKeyGenerating()}
-                          class="px-3 py-1.5 rounded text-sm transition-colors disabled:opacity-50"
-                          style={{
-                            background: "var(--surface-inset)",
-                            color: "var(--text-base)",
-                          }}
-                        >
+                        </Button>
+                        <Button onClick={generateSshKey} disabled={sshKeyGenerating()} variant="secondary" size="sm">
                           <Show when={sshKeyGenerating()} fallback="Generate New Key">
                             <Spinner class="w-3 h-3" />
                           </Show>
-                        </button>
+                        </Button>
                         <Show when={selectedKeyName()}>
-                          <button
-                            onClick={() => setKeyToRemove(selectedKeyName())}
-                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-sm transition-colors ml-auto text-red-600 hover:text-red-700"
-                            style={{
-                              background: "var(--surface-inset)",
-                            }}
-                          >
+                          <Button onClick={() => setKeyToRemove(selectedKeyName())} variant="danger" size="sm" class="ml-auto">
                             <Trash2 class="w-3.5 h-3.5" />
                             Remove
-                          </button>
+                          </Button>
                         </Show>
                       </div>
                     </div>
@@ -1444,18 +1417,10 @@ export function Settings() {
 
                       {/* Action Buttons */}
                       <div class="flex gap-2 justify-end pt-2">
-                        <button
-                          onClick={closeAddKeyDialog}
-                          disabled={addKeyAdding()}
-                          class="px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
-                          style={{
-                            background: "var(--surface-inset)",
-                            color: "var(--text-base)",
-                          }}
-                        >
+                        <Button onClick={closeAddKeyDialog} disabled={addKeyAdding()} variant="secondary" size="md">
                           Cancel
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           onClick={addExistingSshKey}
                           disabled={
                             addKeyAdding() ||
@@ -1463,11 +1428,8 @@ export function Settings() {
                             !addKeyPrivateContent().trim() ||
                             !addKeyName().trim()
                           }
-                          class="inline-flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50"
-                          style={{
-                            background: "var(--interactive-base)",
-                            color: "white",
-                          }}
+                          variant="primary"
+                          size="md"
                           title={
                             !addKeyPrivateContent().trim() ? "Private key is required for Git operations" : undefined
                           }
@@ -1476,7 +1438,7 @@ export function Settings() {
                             <Spinner class="w-4 h-4" />
                             Adding...
                           </Show>
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1520,30 +1482,23 @@ export function Settings() {
                     </p>
 
                     <div class="flex gap-2 justify-end">
-                      <button
-                        onClick={() => setKeyToRemove(null)}
-                        disabled={removeKeyLoading()}
-                        class="px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
-                        style={{
-                          background: "var(--surface-inset)",
-                          color: "var(--text-base)",
-                        }}
-                      >
+                      <Button onClick={() => setKeyToRemove(null)} disabled={removeKeyLoading()} variant="secondary" size="md">
                         Cancel
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => {
                           const name = keyToRemove()
                           if (name) removeSshKey(name)
                         }}
                         disabled={removeKeyLoading()}
-                        class="inline-flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-colors disabled:opacity-50 bg-red-600 hover:bg-red-700 text-white"
+                        variant="danger"
+                        size="md"
                       >
                         <Show when={removeKeyLoading()} fallback="Remove">
                           <Spinner class="w-4 h-4" />
                           Removing...
                         </Show>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1632,16 +1587,9 @@ export function Settings() {
                   <h2 class="text-sm font-medium" style={{ color: "var(--text-strong)" }}>
                     Configured Servers ({mcp.stats().enabled}/{mcp.stats().total} connected)
                   </h2>
-                  <button
-                    onClick={() => setShowMCPAddDialog(true)}
-                    class="text-xs px-2 py-1 rounded transition-colors"
-                    style={{
-                      background: "var(--interactive-base)",
-                      color: "white",
-                    }}
-                  >
+                  <Button onClick={() => setShowMCPAddDialog(true)} variant="primary" size="sm">
                     + Add Server
-                  </button>
+                  </Button>
                 </div>
 
                 <Show when={mcp.loading()}>
