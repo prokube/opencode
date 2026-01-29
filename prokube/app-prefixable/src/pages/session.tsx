@@ -151,34 +151,8 @@ export function Session() {
         navigate(`/${dirSlug()}/settings`)
       },
     },
-    {
-      id: "model.choose",
-      title: "Choose Model",
-      description: "Select the AI model to use",
-      slash: "model",
-      onSelect: () => {
-        console.log("[Command] Model picker")
-        setModelFilter("")
-        setModelIndex(0)
-        setShowModelPicker(true)
-        // Focus filter input after popup opens
-        // Focus handled by createEffect
-      },
-    },
-    {
-      id: "agent.choose",
-      title: "Choose Agent",
-      description: "Select the agent to use",
-      slash: "agent",
-      onSelect: () => {
-        console.log("[Command] Agent picker")
-        setAgentFilter("")
-        setAgentIndex(0)
-        setShowAgentPicker(true)
-        // Focus filter input after popup opens
-        // Focus handled by createEffect
-      },
-    },
+    // Note: /model and /agent are handled dynamically in filteredSlashCommands
+    // to show inline model/agent selection
     {
       id: "mcp.manage",
       title: "MCP Servers",
@@ -195,6 +169,46 @@ export function Session() {
   const filteredSlashCommands = createMemo(() => {
     const q = slashQuery().toLowerCase()
     if (!q) return baseSlashCommands
+
+    // If query starts with "model", show model selection
+    if (q.startsWith("model")) {
+      const modelQuery = q.slice(5).replace(/^[\s:]/, "") // Remove "model" and optional space/colon
+      const modelCommands: Command[] = []
+
+      for (const provider of providers.providers.filter((p) => providers.connected.includes(p.id))) {
+        for (const model of Object.values(provider.models)) {
+          const matchText = `${provider.id} ${model.id} ${model.name}`.toLowerCase()
+          if (!modelQuery || matchText.includes(modelQuery)) {
+            modelCommands.push({
+              id: `model.${provider.id}.${model.id}`,
+              title: model.name || model.id,
+              description: `${provider.name} - ${provider.id}/${model.id}`,
+              onSelect: () => {
+                providers.setSelectedModel({ providerID: provider.id, modelID: model.id })
+              },
+            })
+          }
+        }
+      }
+      return modelCommands.length > 0 ? modelCommands : [{ id: "no-models", title: "No models found", description: "Connect a provider in settings", onSelect: () => navigate(`/${dirSlug()}/settings`) }]
+    }
+
+    // If query starts with "agent", show agent selection
+    if (q.startsWith("agent")) {
+      const agentQuery = q.slice(5).replace(/^[\s:]/, "") // Remove "agent" and optional space/colon
+      const agentCommands: Command[] = providers.agents
+        .filter((a) => !agentQuery || a.name.toLowerCase().includes(agentQuery))
+        .map((agent) => ({
+          id: `agent.${agent.name}`,
+          title: agent.name,
+          description: `Use ${agent.name} agent (${agent.mode} mode)`,
+          onSelect: () => {
+            providers.setSelectedAgent(agent.name)
+          },
+        }))
+      return agentCommands.length > 0 ? agentCommands : [{ id: "no-agents", title: "No agents found", description: "", onSelect: () => {} }]
+    }
+
     return baseSlashCommands.filter(
       (c) =>
         c.slash?.toLowerCase().startsWith(q) ||
