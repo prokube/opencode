@@ -1042,19 +1042,23 @@ export function Session() {
                     </div>
 
                     {/* List */}
-                    <div class="overflow-y-auto flex-1">
+                    <div class="overflow-y-auto flex-1" ref={(el) => {
+                      // Set up effect to scroll selected item into view
+                      createEffect(() => {
+                        const idx = slashIndex()
+                        const selected = el.querySelector(`[data-index="${idx}"]`)
+                        if (selected) {
+                          selected.scrollIntoView({ block: "nearest" })
+                        }
+                      })
+                    }}>
                       <For each={filteredSlashCommands()}>
                         {(cmd, idx) => {
                           const isSelected = () => idx() === slashIndex()
                           return (
                           <button
                             type="button"
-                            ref={(el) => {
-                              // Scroll into view when selected
-                              if (isSelected()) {
-                                el.scrollIntoView({ block: "nearest" })
-                              }
-                            }}
+                            data-index={idx()}
                             onMouseDown={(e) => {
                               e.preventDefault()
                               e.stopPropagation()
