@@ -1,5 +1,4 @@
 import { useNavigate } from "@solidjs/router"
-import { Button } from "@opencode-ai/ui/button"
 import { useSDK } from "../context/sdk"
 import { base64Encode } from "../utils/path"
 import { Plus, Settings } from "lucide-solid"
@@ -100,20 +99,22 @@ export function Home() {
           AI-powered coding assistant for your terminal and web
         </p>
 
-        {/* Action buttons */}
-        <div class="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button onClick={createNewSession} variant="primary" class="px-6" size="large">
-            <div class="flex items-center justify-center gap-2">
-              <Plus class="w-4 h-4" />
-              <span>Start New Session</span>
-            </div>
-          </Button>
-          <Button onClick={openSettings} variant="secondary" class="px-6" size="large">
-            <div class="flex items-center justify-center gap-2">
-              <Settings class="w-4 h-4" />
-              <span>Settings</span>
-            </div>
-          </Button>
+        {/* Action buttons - styled like pkui dev-labs */}
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <button
+            onClick={createNewSession}
+            class="group flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 hover:shadow-md transition-all font-medium text-gray-900 hover:text-purple-700"
+          >
+            <Plus class="w-5 h-5 text-gray-600 group-hover:text-purple-600 transition-colors" />
+            <span>Start New Session</span>
+          </button>
+          <button
+            onClick={openSettings}
+            class="group flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 hover:shadow-md transition-all font-medium text-gray-900 hover:text-purple-700"
+          >
+            <Settings class="w-5 h-5 text-gray-600 group-hover:text-purple-600 transition-colors" />
+            <span>Settings</span>
+          </button>
         </div>
 
         {/* Hint text */}
