@@ -67,13 +67,15 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
   const size = () => (props.size === "large" ? "w-10 h-10" : "w-8 h-8")
   const iconSize = () => (props.size === "large" ? "w-5 h-5" : "w-4 h-4")
 
+  // pkui button style: white bg, gray border, purple when selected/hovered
   return (
     <div
-      class={`${size()} rounded-lg flex items-center justify-center font-medium text-sm shrink-0 transition-all`}
+      class={`${size()} rounded-xl flex items-center justify-center font-medium text-sm shrink-0 transition-all border-2`}
       style={{
-        background: "color-mix(in srgb, var(--interactive-base) 20%, transparent)",
-        color: "var(--interactive-base)",
-        border: props.selected ? "2px solid var(--interactive-base)" : "2px solid transparent",
+        background: props.selected ? "rgb(250, 245, 255)" : "white",
+        color: props.selected ? "rgb(126, 34, 206)" : "rgb(55, 65, 81)",
+        "border-color": props.selected ? "rgb(168, 85, 247)" : "rgb(229, 231, 235)",
+        "box-shadow": props.selected ? "0 4px 6px -1px rgb(0 0 0 / 0.1)" : "none",
       }}
     >
       {initials() || <Folder class={iconSize()} />}
@@ -293,6 +295,13 @@ export function Layout(props: ParentProps) {
   function navigateToProject(worktree: string) {
     // Use router navigation - DirectoryLayout uses keyed For
     // to force full remount when directory changes
+    // Also ensure sidebar is expanded when selecting a project
+    setSidebarExpanded(true)
+    try {
+      localStorage.setItem(SIDEBAR_EXPANDED_KEY, "true")
+    } catch (e) {
+      console.error("Failed to save sidebar state:", e)
+    }
     navigate(`/${base64Encode(worktree)}/session`)
   }
 

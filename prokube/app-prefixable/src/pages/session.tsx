@@ -100,9 +100,17 @@ export function Session() {
       title: "New Session",
       description: "Create a new chat session",
       slash: "new",
-      onSelect: () => {
-        console.log("[Command] New session")
-        navigate(`/${dirSlug()}/session`)
+      onSelect: async () => {
+        console.log("[Command] New session - creating...")
+        try {
+          const res = await client.session.create({})
+          if (res.data) {
+            console.log("[Command] Created session:", res.data.id)
+            navigate(`/${dirSlug()}/session/${res.data.id}`)
+          }
+        } catch (e) {
+          console.error("[Command] Failed to create session:", e)
+        }
       },
     },
     {

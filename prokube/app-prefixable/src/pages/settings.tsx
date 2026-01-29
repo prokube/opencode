@@ -1,4 +1,4 @@
-import { createSignal, For, Show, type JSX, createMemo } from "solid-js"
+import { createSignal, For, Show, type JSX, createMemo, onMount } from "solid-js"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { useProviders } from "../context/providers"
 import { useMCP } from "../context/mcp"
@@ -16,7 +16,13 @@ export function Settings() {
   const [connecting, setConnecting] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [success, setSuccess] = createSignal<string | null>(null)
-  const [activeTab, setActiveTab] = createSignal("providers")
+  // Initialize tab from URL hash, default to "providers"
+  const getInitialTab = () => {
+    const hash = window.location.hash.slice(1)
+    const validTabs = ["providers", "git", "mcp"]
+    return validTabs.includes(hash) ? hash : "providers"
+  }
+  const [activeTab, setActiveTab] = createSignal(getInitialTab())
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
 
@@ -97,11 +103,21 @@ export function Settings() {
   // Load SSH key when Git tab is first accessed
   function onTabChange(tabId: string) {
     setActiveTab(tabId)
+    // Persist tab in URL hash for refresh persistence
+    window.history.replaceState(null, "", `#${tabId}`)
     if (tabId === "git" && !sshKeyLoaded()) {
       setSshKeyLoaded(true)
       loadSshKeys()
     }
   }
+
+  // Load SSH keys on mount if starting on git tab
+  onMount(() => {
+    if (activeTab() === "git" && !sshKeyLoaded()) {
+      setSshKeyLoaded(true)
+      loadSshKeys()
+    }
+  })
 
   async function runPtyCommand(command: string, timeout = 5000): Promise<string> {
     console.log("[runPtyCommand] Starting with command:", command)
