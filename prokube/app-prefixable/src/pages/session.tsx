@@ -1378,9 +1378,17 @@ export function Session() {
                     {/* List */}
                     <div class="overflow-y-auto flex-1">
                       <For each={filteredSlashCommands()}>
-                        {(cmd, idx) => (
+                        {(cmd, idx) => {
+                          const isSelected = () => idx() === slashIndex()
+                          return (
                           <button
                             type="button"
+                            ref={(el) => {
+                              // Scroll into view when selected
+                              if (isSelected()) {
+                                el.scrollIntoView({ block: "nearest" })
+                              }
+                            }}
                             onMouseDown={(e) => {
                               e.preventDefault()
                               e.stopPropagation()
@@ -1388,32 +1396,34 @@ export function Session() {
                             }}
                             class="w-full px-3 py-2 text-left text-sm flex items-start gap-3 transition-colors"
                             style={{
-                              background: idx() === slashIndex() ? "var(--surface-inset)" : "transparent",
+                              background: isSelected() ? "var(--interactive-base)" : "transparent",
+                              color: isSelected() ? "var(--text-on-interactive)" : undefined,
+                              "border-left": isSelected() ? "3px solid var(--text-interactive-base)" : "3px solid transparent",
                             }}
                             onMouseEnter={(e) => {
-                              if (idx() !== slashIndex()) e.currentTarget.style.background = "var(--surface-inset)"
+                              if (!isSelected()) e.currentTarget.style.background = "var(--surface-inset)"
                             }}
                             onMouseLeave={(e) => {
-                              if (idx() !== slashIndex()) e.currentTarget.style.background = "transparent"
+                              if (!isSelected()) e.currentTarget.style.background = "transparent"
                             }}
                           >
                             <Show when={!isPickerMode && cmd.slash}>
-                              <span class="font-mono" style={{ color: "var(--text-interactive-base)" }}>
+                              <span class="font-mono" style={{ color: isSelected() ? "inherit" : "var(--text-interactive-base)" }}>
                                 /{cmd.slash}
                               </span>
                             </Show>
                             <div class="flex-1">
-                              <div class="font-medium" style={{ color: "var(--text-strong)" }}>
+                              <div class="font-medium" style={{ color: isSelected() ? "inherit" : "var(--text-strong)" }}>
                                 {cmd.title}
                               </div>
                               <Show when={cmd.description}>
-                                <div class="text-xs" style={{ color: "var(--text-weak)" }}>
+                                <div class="text-xs opacity-80" style={{ color: isSelected() ? "inherit" : "var(--text-weak)" }}>
                                   {cmd.description}
                                 </div>
                               </Show>
                             </div>
                           </button>
-                        )}
+                        )}}
                       </For>
                     </div>
                   </div>
