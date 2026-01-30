@@ -1,6 +1,9 @@
-import { createContext, useContext, createResource, createEffect, type ParentProps } from "solid-js"
+import { createContext, useContext, createResource, createEffect, type ParentProps, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSDK } from "./sdk"
+
+// Storage key
+const MODELS_BY_AGENT_KEY = "opencode.modelsByAgent"
 
 // Default model to use
 const DEFAULT_PROVIDER = "opencode"
@@ -57,6 +60,7 @@ interface ProviderContextValue {
   loading: boolean
   selectedModel: ModelKey | null
   selectedAgent: string
+  modelsByAgent: Record<string, ModelKey>
   setSelectedModel: (model: ModelKey | null) => void
   setSelectedAgent: (agent: string) => void
   refetch: () => void
@@ -71,8 +75,31 @@ export function ProviderProvider(props: ParentProps) {
   const { client } = useSDK()
 
   const [store, setStore] = createStore({
-    selectedModel: null as ModelKey | null,
+    modelsByAgent: {} as Record<string, ModelKey>,
     selectedAgent: DEFAULT_AGENT,
+  })
+
+  // Load models from localStorage
+  onMount(() => {
+    try {
+      const stored = localStorage.getItem(MODELS_BY_AGENT_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        setStore("modelsByAgent", parsed)
+        console.log("[Providers] Loaded models from storage:", parsed)
+      }
+    } catch (e) {
+      console.error("Failed to load models from storage:", e)
+    }
+  })
+
+  // Save models to localStorage whenever they change
+  createEffect(() => {
+    try {
+      localStorage.setItem(MODELS_BY_AGENT_KEY, JSON.stringify(store.modelsByAgent))
+    } catch (e) {
+      console.error("Failed to save models to storage:", e)
+    }
   })
 
   // Fetch providers
@@ -89,14 +116,22 @@ export function ProviderProvider(props: ParentProps) {
   // Auto-select default model when provider data loads
   createEffect(() => {
     const data = providerData()
-    if (!data || store.selectedModel) return
+    if (!data) return
 
     // Check if default provider is connected
     if (data.connected.includes(DEFAULT_PROVIDER)) {
       const provider = data.all.find((p) => p.id === DEFAULT_PROVIDER)
       if (provider && provider.models[DEFAULT_MODEL]) {
-        console.log("[Providers] Auto-selecting default model:", DEFAULT_PROVIDER, DEFAULT_MODEL)
-        setStore("selectedModel", { providerID: DEFAULT_PROVIDER, modelID: DEFAULT_MODEL })
+        // Only set default model for DEFAULT_AGENT if not already set
+        if (!store.modelsByAgent[DEFAULT_AGENT]) {
+          console.log(
+            "[Providers] Auto-selecting default model for agent:",
+            DEFAULT_AGENT,
+            DEFAULT_PROVIDER,
+            DEFAULT_MODEL,
+          )
+          setStore("modelsByAgent", DEFAULT_AGENT, { providerID: DEFAULT_PROVIDER, modelID: DEFAULT_MODEL })
+        }
       }
     }
   })
@@ -133,7 +168,9 @@ export function ProviderProvider(props: ParentProps) {
   })
 
   function setSelectedModel(model: ModelKey | null) {
-    setStore("selectedModel", model)
+    if (model) {
+      setStore("modelsByAgent", store.selectedAgent, model)
+    }
   }
 
   function setSelectedAgent(agent: string) {
@@ -213,10 +250,14 @@ export function ProviderProvider(props: ParentProps) {
       return providerData.loading || agentsData.loading
     },
     get selectedModel() {
-      return store.selectedModel
+      // Return the model for the currently selected agent
+      return store.modelsByAgent[store.selectedAgent] ?? null
     },
     get selectedAgent() {
       return store.selectedAgent
+    },
+    get modelsByAgent() {
+      return store.modelsByAgent
     },
     setSelectedModel,
     setSelectedAgent,
