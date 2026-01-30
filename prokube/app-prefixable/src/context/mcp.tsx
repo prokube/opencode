@@ -89,8 +89,25 @@ export function MCPProvider(props: ParentProps) {
 
   async function add(name: string, config: McpConfig) {
     try {
-      await client.mcp.add({ name, config })
+      console.log("[MCP] Adding server:", name, config)
+      const response = await client.mcp.add({ name, config })
+      console.log("[MCP] Add server response:", response)
       await refresh()
+
+      // Check if the server actually connected successfully
+      const s = await client.mcp.status()
+      const status = s.data?.[name]
+      console.log("[MCP] Server status after add:", status)
+
+      if (status?.status === "failed") {
+        throw new Error(`Failed to connect: ${status.error}`)
+      }
+      if (status?.status === "needs_auth") {
+        throw new Error("Server requires OAuth authentication. Please configure OAuth settings.")
+      }
+      if (status?.status === "needs_client_registration") {
+        throw new Error(status.error || "Server requires OAuth client registration")
+      }
     } catch (e) {
       console.error("[MCP] Failed to add server:", name, e)
       throw e

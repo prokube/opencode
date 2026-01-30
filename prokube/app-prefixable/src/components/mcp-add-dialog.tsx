@@ -97,11 +97,16 @@ export function MCPAddDialog(props: Props) {
     if (timeoutMs) config.timeout = timeoutMs
 
     setLoading(true)
+    setError("") // Clear previous errors
     try {
+      console.log("[MCPAddDialog] Adding server:", serverName, config)
       await mcp.add(serverName, config)
+      console.log("[MCPAddDialog] Server added successfully")
       props.onBack()
     } catch (e: any) {
-      setError(e.message || "Failed to add server")
+      console.error("[MCPAddDialog] Failed to add server:", e)
+      const errorMsg = e.message || e.toString() || "Failed to add server"
+      setError(errorMsg)
     } finally {
       setLoading(false)
     }
