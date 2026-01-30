@@ -53,13 +53,9 @@ function ProjectAvatar(props: { project: Project; size?: "small" | "large"; sele
     <div
       class={`${size()} rounded-lg flex items-center justify-center font-medium text-sm shrink-0 transition-all`}
       style={{
-        background: props.selected
-          ? "var(--interactive-base)"
-          : "color-mix(in srgb, var(--interactive-base) 20%, transparent)",
-        color: props.selected ? "white" : "var(--interactive-base)",
-        border: props.selected
-          ? "2px solid var(--interactive-base)"
-          : "2px solid color-mix(in srgb, var(--interactive-base) 40%, transparent)",
+        background: "color-mix(in srgb, var(--interactive-base) 20%, transparent)",
+        color: "var(--interactive-base)",
+        border: props.selected ? "2px solid var(--interactive-base)" : "2px solid transparent",
       }}
     >
       {initials() || <Folder class={iconSize()} />}
