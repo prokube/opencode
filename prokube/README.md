@@ -20,10 +20,13 @@ opencode/                          # Fork of upstream OpenCode
     │   │   ├── context/           #    State management (SDK, MCP, etc.)
     │   │   ├── pages/             #    Page components
     │   │   └── utils/             #    Utilities (prokube-api.ts, etc.)
-    │   └── dev.ts                 #    Dev server with prokube endpoints
+    │   └── dev.ts                 #    Dev server (imports shared/)
+    │
+    ├── shared/                    #    Shared code between servers
+    │   └── prokube-endpoints.ts   #    Prokube API endpoints
     │
     └── docker/                    #    Kubeflow notebook image
-        ├── serve-ui.ts            #    Production server with prokube endpoints
+        ├── serve-ui.ts            #    Production server (imports shared/)
         └── Dockerfile
 ```
 

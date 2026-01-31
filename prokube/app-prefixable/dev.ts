@@ -1,6 +1,5 @@
 import { watch } from "fs"
-import * as fs from "node:fs"
-import * as nodePath from "node:path"
+import { handleProkubeEndpoint, isApiPath } from "../shared/prokube-endpoints"
 
 const BASE_PATH = process.env.BASE_PATH || "/"
 const PORT = parseInt(process.env.PORT || "3000", 10)
@@ -50,111 +49,12 @@ const server = Bun.serve<{ target: string }>({
       return new Response("WebSocket upgrade failed", { status: 500 })
     }
 
-    // ========== Prokube-specific API endpoints ==========
-    // These are handled directly by this server, not proxied to the backend.
+    // Prokube-specific API endpoints (handled locally, not proxied)
+    const prokubeResponse = await handleProkubeEndpoint(strippedPath, req.method, url, req)
+    if (prokubeResponse) return prokubeResponse
 
-    // POST /api/prokube/mkdir - Create directory recursively
-    if (strippedPath === "/api/prokube/mkdir" && req.method === "POST") {
-      try {
-        const body = await req.json()
-        const dirPath = body.path
-        if (!dirPath || typeof dirPath !== "string") {
-          return Response.json({ error: "path is required" }, { status: 400 })
-        }
-        console.log("[Prokube] mkdir:", dirPath)
-        await fs.promises.mkdir(dirPath, { recursive: true })
-        return Response.json(true)
-      } catch (e) {
-        console.error("[Prokube] mkdir error:", e)
-        return Response.json(false)
-      }
-    }
-
-    // GET /api/prokube/list-dirs - List directories in a given path (2 levels deep)
-    if (strippedPath === "/api/prokube/list-dirs" && req.method === "GET") {
-      const directory = url.searchParams.get("directory")
-      const query = url.searchParams.get("query") || ""
-      const limit = parseInt(url.searchParams.get("limit") || "50", 10)
-
-      if (!directory) {
-        return Response.json({ error: "directory parameter is required" }, { status: 400 })
-      }
-
-      console.log("[Prokube] list-dirs:", directory, "query:", query)
-
-      try {
-        const dirs: string[] = []
-        const ignoreNested = new Set(["node_modules", "dist", "build", "target", "vendor", ".git"])
-        const shouldIgnore = (name: string) => name.startsWith(".") || ignoreNested.has(name)
-
-        // Read top-level directories
-        const topEntries = await fs.promises.readdir(directory, { withFileTypes: true }).catch(() => [])
-
-        for (const entry of topEntries) {
-          if (!entry.isDirectory()) continue
-          if (shouldIgnore(entry.name)) continue
-          dirs.push(entry.name + "/")
-
-          // Read second-level directories
-          const subDir = nodePath.join(directory, entry.name)
-          const subEntries = await fs.promises.readdir(subDir, { withFileTypes: true }).catch(() => [])
-          for (const subEntry of subEntries) {
-            if (!subEntry.isDirectory()) continue
-            if (shouldIgnore(subEntry.name)) continue
-            dirs.push(entry.name + "/" + subEntry.name + "/")
-          }
-        }
-
-        // Sort and filter by query
-        dirs.sort()
-        const queryLower = query.trim().toLowerCase()
-        const filtered = queryLower ? dirs.filter((d) => d.toLowerCase().includes(queryLower)) : dirs
-
-        return Response.json(filtered.slice(0, limit))
-      } catch (e) {
-        console.error("[Prokube] list-dirs error:", e)
-        return Response.json([])
-      }
-    }
-
-    // ========== End Prokube-specific endpoints ==========
-
-    // API requests go directly to the API
-    const apiPaths = [
-      "/api",
-      "/event",
-      "/config",
-      "/provider",
-      "/project",
-      "/permission",
-      "/pty",
-      "/mcp",
-      "/file",
-      "/health",
-      "/path",
-      "/command",
-      "/auth",
-      "/app",
-      "/agent",
-      "/session",
-      "/find",
-      "/question",
-      "/global",
-      "/skill",
-      "/lsp",
-      "/formatter",
-      "/doc",
-      "/log",
-      "/instance",
-      "/vcs",
-    ]
-
-    // Check if this is an API request using the stripped path
-    const isApiRequest = apiPaths.some(
-      (p) => strippedPath === p || strippedPath.startsWith(p + "/") || strippedPath.startsWith(p + "?"),
-    )
-
-    if (isApiRequest) {
+    // API requests go directly to the backend
+    if (isApiPath(strippedPath)) {
       const target = new URL(strippedPath + url.search, API_URL)
       const headers = new Headers(req.headers)
 

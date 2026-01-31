@@ -28,14 +28,14 @@ When adding a feature, ask: "Can I do this without touching `packages/`?"
 
 ### Prokube-Specific Endpoints
 
-These endpoints are defined in `serve-ui.ts` and `dev.ts`, NOT in upstream:
+These endpoints are defined in `shared/prokube-endpoints.ts` and used by both `dev.ts` and `serve-ui.ts`:
 
 ```typescript
 // POST /api/prokube/mkdir - Create directory recursively
 // GET /api/prokube/list-dirs - List directories (2 levels)
 ```
 
-Used by: `src/utils/prokube-api.ts`
+Used by: `app-prefixable/src/utils/prokube-api.ts`
 
 ### Prokube-Specific Frontend Logic
 
@@ -60,14 +60,18 @@ prokube/
 │   │   ├── context/    # React-like contexts (SDK, Events, Providers, MCP)
 │   │   ├── pages/      # Page components (Session, Settings, Layout)
 │   │   └── utils/      # Utility functions (path handling, etc.)
+│   ├── dev.ts          # Development server (uses shared/prokube-endpoints)
 │   ├── build.ts        # Build script
 │   └── package.json
 ├── docker/             # Docker image for Kubeflow deployment
 │   ├── Dockerfile      # Multi-stage build: Bun UI server + OpenCode API
 │   ├── Makefile        # Build and push commands
-│   ├── serve-ui.ts     # Bun server that proxies API and serves static files
+│   ├── serve-ui.ts     # Production server (uses shared/prokube-endpoints)
 │   ├── start-server.sh # Entrypoint script
 │   └── s6/             # s6-overlay service definitions
+├── shared/             # Shared code between dev and production servers
+│   └── prokube-endpoints.ts  # Prokube API endpoints (/api/prokube/*)
+├── README.md           # Overview and architecture
 └── AGENTS.md           # This file
 ```
 
