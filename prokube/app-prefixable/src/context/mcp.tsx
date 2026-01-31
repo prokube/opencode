@@ -44,6 +44,7 @@ interface MCPContextValue {
   connect: (name: string) => Promise<void>
   disconnect: (name: string) => Promise<void>
   add: (name: string, config: McpConfig) => Promise<void>
+  remove: (name: string) => Promise<void>
   startAuth: (name: string) => Promise<{ authorizationUrl: string } | null>
   stats: () => { enabled: number; failed: boolean; total: number }
 }
@@ -130,6 +131,36 @@ export function MCPProvider(props: ParentProps) {
     }
   }
 
+  async function remove(name: string) {
+    try {
+      console.log("[MCP] Removing server:", name)
+
+      // First disconnect if connected
+      await client.mcp.disconnect({ name }).catch(() => {
+        // Ignore disconnect errors - server might not be connected
+      })
+
+      // Remove from global config
+      const currentConfig = await client.global.config.get()
+      const existingMcp = (currentConfig.data?.mcp as Record<string, McpConfig> | undefined) || {}
+
+      // Create new config without the removed server
+      const { [name]: removed, ...remainingMcp } = existingMcp
+
+      await client.global.config.update({
+        config: {
+          mcp: remainingMcp,
+        },
+      })
+      console.log("[MCP] Server removed from global config")
+
+      await refresh()
+    } catch (e) {
+      console.error("[MCP] Failed to remove server:", name, e)
+      throw e
+    }
+  }
+
   async function startAuth(name: string): Promise<{ authorizationUrl: string } | null> {
     try {
       const res = await client.mcp.auth.start({ name })
@@ -171,6 +202,7 @@ export function MCPProvider(props: ParentProps) {
         connect,
         disconnect,
         add,
+        remove,
         startAuth,
         stats,
       }}

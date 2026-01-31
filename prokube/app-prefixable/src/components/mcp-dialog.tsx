@@ -1,6 +1,6 @@
 import { createSignal, createMemo, Show, For } from "solid-js"
 import { useMCP } from "../context/mcp"
-import { X, Plus } from "lucide-solid"
+import { X, Plus, Trash2 } from "lucide-solid"
 import { Button } from "./ui/button"
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
 export function MCPDialog(props: Props) {
   const mcp = useMCP()
   const [loading, setLoading] = createSignal<string | null>(null)
+  const [deleting, setDeleting] = createSignal<string | null>(null)
 
   const items = createMemo(() =>
     Object.entries(mcp.servers)
@@ -19,7 +20,7 @@ export function MCPDialog(props: Props) {
   )
 
   async function toggle(name: string) {
-    if (loading()) return
+    if (loading() || deleting()) return
     setLoading(name)
 
     const status = mcp.servers[name]
@@ -36,6 +37,20 @@ export function MCPDialog(props: Props) {
     }
 
     setLoading(null)
+  }
+
+  async function handleDelete(name: string) {
+    if (loading() || deleting()) return
+    if (!confirm(`Remove MCP server "${name}"?`)) return
+
+    setDeleting(name)
+    try {
+      await mcp.remove(name)
+    } catch (e) {
+      console.error("[MCPDialog] Failed to remove server:", e)
+    } finally {
+      setDeleting(null)
+    }
   }
 
   function getStatusLabel(status: { status: string; error?: string }) {
@@ -169,26 +184,42 @@ export function MCPDialog(props: Props) {
                     </Show>
                   </div>
 
-                  {/* Toggle Switch */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggle(item.name)
-                    }}
-                    class="relative w-10 h-5 rounded-full transition-colors"
-                    style={{
-                      background: enabled() ? "var(--interactive-base)" : "var(--surface-inset)",
-                    }}
-                    disabled={loading() === item.name}
-                  >
-                    <div
-                      class="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
-                      style={{
-                        background: "white",
-                        left: enabled() ? "calc(100% - 18px)" : "2px",
+                  <div class="flex items-center gap-2">
+                    {/* Toggle Switch */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggle(item.name)
                       }}
-                    />
-                  </button>
+                      class="relative w-10 h-5 rounded-full transition-colors"
+                      style={{
+                        background: enabled() ? "var(--interactive-base)" : "var(--surface-inset)",
+                      }}
+                      disabled={loading() === item.name || deleting() === item.name}
+                    >
+                      <div
+                        class="absolute top-0.5 w-4 h-4 rounded-full transition-transform"
+                        style={{
+                          background: "white",
+                          left: enabled() ? "calc(100% - 18px)" : "2px",
+                        }}
+                      />
+                    </button>
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(item.name)
+                      }}
+                      class="p-1 rounded transition-colors opacity-50 hover:opacity-100"
+                      style={{ color: "var(--icon-critical-base)" }}
+                      disabled={loading() === item.name || deleting() === item.name}
+                      title="Remove server"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )
             }}
