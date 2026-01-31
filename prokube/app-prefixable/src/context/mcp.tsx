@@ -182,10 +182,14 @@ export function MCPProvider(props: ParentProps) {
   onMount(() => {
     refresh()
 
-    // Listen for MCP-related events
+    // Listen for MCP-related events and server restarts
     const unsub = events.subscribe((event) => {
       // Refresh on any mcp-related event type
       if (event.type.startsWith("mcp.")) {
+        refresh()
+      }
+      // Also refresh when server reconnects (after config change causes restart)
+      if (event.type === "server.connected") {
         refresh()
       }
     })
