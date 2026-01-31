@@ -6,6 +6,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Folder, X, GitBranch, AlertCircle } from "lucide-solid"
 import { Terminal } from "./terminal"
 import { useEvents } from "../context/events"
+import { mkdir, listDirs } from "../utils/prokube-api"
 
 type DialogView = "browse" | "clone"
 
@@ -74,22 +75,12 @@ export function ProjectDialog(props: ProjectDialogProps) {
   async function loadHomeFolders(home: string) {
     setLoadingHome(true)
     try {
-      // Use find.files with a space query to list all directories
-      // (empty query doesn't work, but space returns all results)
-      const res = await client.find.files({
-        directory: home,
-        query: " ",
-        type: "directory",
-        limit: 50,
-      })
-      // Handle both array response and wrapped response
-      const data = res.data
-      const results = Array.isArray(data) ? data : ((data as unknown as { files?: string[] })?.files ?? [])
+      // Use prokube API to list directories (2 levels deep)
+      const results = await listDirs(serverUrl, home, { limit: 50 })
       // Filter to only show top-level directories (no nested paths)
-      // Remove trailing slash before checking for nested paths
       const topLevel = results
         .map((r: string) => r.replace(/\/$/, "")) // Remove trailing slash
-        .filter((r: string) => !r.includes("/")) // Now check for nested paths
+        .filter((r: string) => !r.includes("/")) // Only top-level
         .map((r: string) => `${home}/${r}`.replace(/\/+/g, "/"))
       setHomeFolders(topLevel)
     } catch (e) {
@@ -110,15 +101,8 @@ export function ProjectDialog(props: ProjectDialogProps) {
 
     setSearching(true)
     try {
-      const res = await client.find.files({
-        directory: home,
-        query: query,
-        type: "directory",
-        limit: 20,
-      })
-      // Handle both array response and wrapped response
-      const data = res.data
-      const results = Array.isArray(data) ? data : ((data as unknown as { files?: string[] })?.files ?? [])
+      // Use prokube API to search directories
+      const results = await listDirs(serverUrl, home, { query, limit: 20 })
       setSearchResults(results.map((r: string) => `${home}/${r}`.replace(/\/+/g, "/")))
     } catch (e) {
       console.error("Failed to search folders:", e)
@@ -149,11 +133,12 @@ export function ProjectDialog(props: ProjectDialogProps) {
 
     setCreating(true)
     try {
-      const res = await client.file.mkdir({ path: fullPath })
-      if (res.data) {
+      // Use prokube API to create directory
+      const success = await mkdir(serverUrl, fullPath)
+      if (success) {
         selectProject(fullPath)
       } else {
-        console.error("Failed to create directory:", res.error)
+        console.error("Failed to create directory")
       }
     } catch (e) {
       console.error("Failed to create directory:", e)

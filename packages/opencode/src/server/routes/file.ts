@@ -63,7 +63,6 @@ export const FileRoutes = lazy(() =>
         "query",
         z.object({
           query: z.string(),
-          directory: z.string().optional(),
           dirs: z.enum(["true", "false"]).optional(),
           type: z.enum(["file", "directory"]).optional(),
           limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -71,13 +70,11 @@ export const FileRoutes = lazy(() =>
       ),
       async (c) => {
         const query = c.req.valid("query").query
-        const directory = c.req.valid("query").directory
         const dirs = c.req.valid("query").dirs
         const type = c.req.valid("query").type
         const limit = c.req.valid("query").limit
         const results = await File.search({
           query,
-          directory,
           limit: limit ?? 10,
           dirs: dirs !== "false",
           type,
@@ -195,35 +192,6 @@ export const FileRoutes = lazy(() =>
       async (c) => {
         const content = await File.status()
         return c.json(content)
-      },
-    )
-    .post(
-      "/file/mkdir",
-      describeRoute({
-        summary: "Create directory",
-        description: "Create a directory (and any parent directories) at the specified path.",
-        operationId: "file.mkdir",
-        responses: {
-          200: {
-            description: "Directory created",
-            content: {
-              "application/json": {
-                schema: resolver(z.boolean()),
-              },
-            },
-          },
-        },
-      }),
-      validator(
-        "json",
-        z.object({
-          path: z.string(),
-        }),
-      ),
-      async (c) => {
-        const dir = c.req.valid("json").path
-        const result = await File.mkdir(dir)
-        return c.json(result)
       },
     ),
 )

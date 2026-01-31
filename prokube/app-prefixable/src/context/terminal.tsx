@@ -1,5 +1,7 @@
 import { createContext, useContext, createSignal, type ParentProps } from "solid-js"
 import { useSDK } from "./sdk"
+import { useBasePath } from "./base-path"
+import { mkdir } from "../utils/prokube-api"
 
 interface PTYSession {
   id: string
@@ -26,6 +28,7 @@ const TerminalContext = createContext<TerminalContextValue>()
 
 export function TerminalProvider(props: ParentProps) {
   const { client } = useSDK()
+  const { serverUrl } = useBasePath()
   const [sessions, setSessions] = createSignal<PTYSession[]>([])
   const [active, setActive] = createSignal<string | null>(null)
   const [opened, setOpened] = createSignal(false)
@@ -40,9 +43,7 @@ export function TerminalProvider(props: ParentProps) {
       // Ensure the directory exists before creating the PTY
       if (cwd) {
         console.log("[Terminal] Ensuring directory exists:", cwd)
-        await client.file.mkdir({ path: cwd }).catch(() => {
-          // Directory might already exist, ignore error
-        })
+        await mkdir(serverUrl, cwd)
       }
 
       console.log("[Terminal] Creating PTY session, cwd:", cwd)
