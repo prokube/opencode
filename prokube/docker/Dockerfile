@@ -89,6 +89,9 @@ COPY --from=builder /opencode/prokube/app-prefixable/dist /opt/opencode-ui/dist
 # Copy server script (path relative to repo root)
 COPY prokube/docker/serve-ui.ts /opt/opencode-ui/serve-ui.ts
 
+# Copy shared prokube modules (for serve-ui.ts imports)
+COPY prokube/shared /opt/shared
+
 # Copy s6 configuration
 COPY prokube/docker/s6/ /etc/
 
