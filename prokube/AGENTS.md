@@ -48,6 +48,14 @@ Kubeflow Pod (Port 8888)
 2. **API Proxy**: All API requests go through the Bun server which strips the prefix before forwarding
 3. **SSE Events**: Server-Sent Events are proxied for real-time updates
 
+## Environment Variables
+
+| Variable    | Default                 | Description            |
+| ----------- | ----------------------- | ---------------------- |
+| `BASE_PATH` | `/`                     | URL prefix for the app |
+| `PORT`      | `3000`                  | Dev server port        |
+| `API_URL`   | `http://localhost:4096` | Backend API URL        |
+
 ## Local Development
 
 For local development, run the backend and frontend separately in a fresh working directory:
@@ -219,6 +227,60 @@ curl http://127.0.0.1:4096/provider
 
 # Check session messages
 curl http://127.0.0.1:4096/session/<session-id>/message
+```
+
+## Fork & Upstream Sync Strategy
+
+This project is a fork of the upstream OpenCode repository. To ensure smooth upstream updates, follow these rules:
+
+### Golden Rule: Never Modify Upstream Files
+
+**ONLY add new files. NEVER modify existing upstream files.**
+
+This means:
+
+- All prokube code goes in `prokube/` directory (NEW files only)
+- Do NOT modify `packages/app/`, `packages/ui/`, `packages/opencode/`, etc.
+- Do NOT modify root `package.json` or `pnpm-workspace.yaml`
+
+### Why This Matters
+
+When rebasing on upstream:
+
+- **New files** = No conflicts, ever
+- **Modified files** = Potential merge conflicts on every rebase
+
+### Directory Structure
+
+```
+opencode/                      # Fork of upstream
+├── packages/                  # UPSTREAM - DO NOT TOUCH
+│   ├── app/
+│   ├── ui/
+│   ├── opencode/
+│   └── sdk/
+│
+├── prokube/                   # YOUR CODE - Safe to modify
+│   ├── app-prefixable/
+│   └── docker/
+│
+├── package.json               # UPSTREAM - DO NOT TOUCH
+└── pnpm-workspace.yaml        # UPSTREAM - DO NOT TOUCH
+```
+
+### Rebase Workflow
+
+```bash
+# 1. Fetch upstream
+git fetch upstream
+
+# 2. Rebase your branch onto upstream/dev
+git rebase upstream/dev
+
+# 3. If you followed the rules: zero conflicts
+
+# 4. Force push to your fork
+git push --force-with-lease origin your-branch
 ```
 
 ## Session Completion
