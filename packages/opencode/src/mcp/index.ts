@@ -283,15 +283,6 @@ export namespace MCP {
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
 
-    // Persist to config file
-    const config = await Config.get()
-    await Config.update({
-      mcp: {
-        ...(config.mcp || {}),
-        [name]: mcp,
-      },
-    })
-
     return {
       status: s.status,
     }
