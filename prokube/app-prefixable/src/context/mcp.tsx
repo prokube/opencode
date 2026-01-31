@@ -140,16 +140,13 @@ export function MCPProvider(props: ParentProps) {
         // Ignore disconnect errors - server might not be connected
       })
 
-      // Remove from global config
-      const currentConfig = await client.global.config.get()
-      const existingMcp = (currentConfig.data?.mcp as Record<string, McpConfig> | undefined) || {}
-
-      // Create new config without the removed server
-      const { [name]: removed, ...remainingMcp } = existingMcp
-
+      // Remove from global config by setting the server to null
+      // (The backend does a deep merge, so we need to explicitly null the key)
       await client.global.config.update({
         config: {
-          mcp: remainingMcp,
+          mcp: {
+            [name]: null as unknown as McpConfig,
+          },
         },
       })
       console.log("[MCP] Server removed from global config")
