@@ -87,10 +87,26 @@ export function MCPProvider(props: ParentProps) {
     }
   }
 
-  async function add(name: string, config: McpConfig) {
+  async function add(name: string, mcpConfig: McpConfig) {
     try {
-      console.log("[MCP] Adding server:", name, config)
-      const response = await client.mcp.add({ name, config })
+      console.log("[MCP] Adding server:", name, mcpConfig)
+
+      // First, persist the MCP config to the global config file
+      // This is necessary because mcp.status() reads from the config file
+      const currentConfig = await client.global.config.get()
+      const existingMcp = (currentConfig.data?.mcp as Record<string, McpConfig> | undefined) || {}
+      await client.global.config.update({
+        config: {
+          mcp: {
+            ...existingMcp,
+            [name]: mcpConfig,
+          },
+        },
+      })
+      console.log("[MCP] Config persisted to global config")
+
+      // Now call mcp.add to connect the server
+      const response = await client.mcp.add({ name, config: mcpConfig })
       console.log("[MCP] Add server response:", response)
       await refresh()
 
