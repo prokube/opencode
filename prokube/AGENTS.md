@@ -4,6 +4,52 @@
 
 This directory contains the **prefix-aware Web UI** for OpenCode that runs in Kubeflow Notebooks. It allows OpenCode to be deployed under any URL prefix (e.g., `/notebook/namespace/name/`).
 
+## ⚠️ Critical: Upstream vs. Prokube Boundary
+
+**This is the most important concept in this codebase.**
+
+### The Rule
+
+| Directory | Can Modify? | Why |
+|-----------|-------------|-----|
+| `packages/*` | ⛔ **NEVER** | Upstream OpenCode code. Any changes here cause rebase conflicts. |
+| `prokube/*` | ✅ **ALWAYS** | Our code. New files only = no conflicts ever. |
+
+### How to Implement Features
+
+When adding a feature, ask: "Can I do this without touching `packages/`?"
+
+| Feature Type | Wrong Approach ❌ | Right Approach ✅ |
+|--------------|-------------------|-------------------|
+| New API endpoint | Modify `packages/opencode/src/server/` | Add to `prokube/docker/serve-ui.ts` |
+| UI component | Modify `packages/app/src/` | Add to `prokube/app-prefixable/src/` |
+| SDK extension | Modify `packages/sdk/` | Create wrapper in `prokube/app-prefixable/src/utils/` |
+| Config persistence | Modify backend code | Handle in frontend (`context/mcp.tsx`) |
+
+### Prokube-Specific Endpoints
+
+These endpoints are defined in `serve-ui.ts` and `dev.ts`, NOT in upstream:
+
+```typescript
+// POST /api/prokube/mkdir - Create directory recursively
+// GET /api/prokube/list-dirs - List directories (2 levels)
+```
+
+Used by: `src/utils/prokube-api.ts`
+
+### Prokube-Specific Frontend Logic
+
+Some features require frontend-side workarounds because we can't modify the backend:
+
+1. **MCP Config Persistence** (`context/mcp.tsx`)
+   - Backend `MCP.add()` only adds to memory, not config file
+   - Frontend calls `global.config.update()` BEFORE `mcp.add()`
+   - This persists the MCP server to the global config
+
+2. **Directory Creation** (`utils/prokube-api.ts`)
+   - Uses `/api/prokube/mkdir` instead of upstream file API
+   - Allows creating project directories without backend changes
+
 ### Directory Structure
 
 ```
@@ -250,6 +296,15 @@ When rebasing on upstream:
 - **New files** = No conflicts, ever
 - **Modified files** = Potential merge conflicts on every rebase
 
+### Real Example: MCP Persistence Bug
+
+We had a bug where adding MCP servers via UI didn't persist them.
+
+| Approach | Impact |
+|----------|--------|
+| ❌ Modify `packages/opencode/src/mcp/index.ts` to call `Config.update()` | Works, but creates rebase conflict every time upstream changes that file |
+| ✅ Modify `prokube/app-prefixable/src/context/mcp.tsx` to call `global.config.update()` before `mcp.add()` | Same result, zero rebase conflicts |
+
 ### Directory Structure
 
 ```
@@ -271,17 +326,24 @@ opencode/                      # Fork of upstream
 ### Rebase Workflow
 
 ```bash
-# 1. Fetch upstream
-git fetch upstream
+# 1. Fetch upstream (origin points to prokube/opencode, dev is synced from upstream)
+git fetch origin
 
-# 2. Rebase your branch onto upstream/dev
-git rebase upstream/dev
+# 2. Rebase your branch onto origin/dev
+git rebase origin/dev
 
-# 3. If you followed the rules: zero conflicts
+# 3. If you followed the rules: zero conflicts (except bun.lock, .github/workflows)
 
-# 4. Force push to your fork
-git push --force-with-lease origin your-branch
+# 4. Push to your branch
+git push origin your-branch
 ```
+
+### Expected Conflicts
+
+Only these files should ever conflict (and are easy to resolve):
+
+- `bun.lock` - Accept upstream, regenerate with `bun install`
+- `.github/workflows/*` - Accept upstream (CI config)
 
 ## Session Completion
 
