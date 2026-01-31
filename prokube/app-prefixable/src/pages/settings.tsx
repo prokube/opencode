@@ -25,6 +25,7 @@ export function Settings() {
   const [activeTab, setActiveTab] = createSignal(getInitialTab())
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [mcpLoading, setMcpLoading] = createSignal<string | null>(null)
+  const [mcpDeleting, setMcpDeleting] = createSignal<string | null>(null)
 
   // Provider search
   const [providerSearch, setProviderSearch] = createSignal("")
@@ -1712,7 +1713,7 @@ export function Settings() {
                                   }
                                   setMcpLoading(null)
                                 }}
-                                disabled={mcpLoading() === name}
+                                disabled={mcpLoading() === name || mcpDeleting() === name}
                                 class="relative w-10 h-5 rounded-full transition-colors disabled:opacity-50"
                                 style={{
                                   background: isConnected() ? "var(--interactive-base)" : "var(--surface-inset)",
@@ -1725,6 +1726,28 @@ export function Settings() {
                                     left: isConnected() ? "calc(100% - 18px)" : "2px",
                                   }}
                                 />
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                onClick={async () => {
+                                  if (mcpLoading() || mcpDeleting()) return
+                                  if (!confirm(`Remove MCP server "${name}"?`)) return
+                                  setMcpDeleting(name)
+                                  try {
+                                    await mcp.remove(name)
+                                  } catch (e) {
+                                    console.error("[Settings] Failed to remove MCP server:", e)
+                                  } finally {
+                                    setMcpDeleting(null)
+                                  }
+                                }}
+                                disabled={mcpLoading() === name || mcpDeleting() === name}
+                                class="p-1 rounded transition-colors opacity-50 hover:opacity-100 disabled:opacity-30"
+                                style={{ color: "var(--icon-critical-base)" }}
+                                title="Remove server"
+                              >
+                                <Trash2 class="w-4 h-4" />
                               </button>
                             </div>
                           </div>
