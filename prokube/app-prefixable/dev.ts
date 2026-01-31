@@ -146,6 +146,7 @@ const server = Bun.serve<{ target: string }>({
       "/doc",
       "/log",
       "/instance",
+      "/vcs",
     ]
 
     // Check if this is an API request using the stripped path

@@ -12,6 +12,7 @@ import { MCPDialog } from "../components/mcp-dialog"
 import { MCPAddDialog } from "../components/mcp-add-dialog"
 import { QuestionPrompt } from "../components/question-prompt"
 import { SessionInfo } from "../components/session-info"
+import { SessionSidebar } from "../components/session-sidebar"
 import { base64Encode } from "../utils/path"
 import type { Part } from "@opencode-ai/sdk/v2/client"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -74,10 +75,22 @@ export function Session() {
       // Immediately clear old messages and show loading state
       setMessages([])
       setLoadingHistory(true)
+      setProcessing(false) // Reset processing state for new session
       loadMessages(id)
+
+      // Check if this session is actually busy
+      client.session.status({}).then((res) => {
+        const statuses = res.data as Record<string, { type: string }> | undefined
+        if (statuses && statuses[id]) {
+          const isBusy = statuses[id].type === "busy" || statuses[id].type === "retry"
+          console.log("[Session] Initial status for", id, ":", statuses[id].type, "isBusy:", isBusy)
+          setProcessing(isBusy)
+        }
+      })
     } else {
       setMessages([])
       setLoadingHistory(false)
+      setProcessing(false)
     }
   })
   const [showSlashPopover, setShowSlashPopover] = createSignal(false)
@@ -1218,7 +1231,12 @@ export function Session() {
   // Use Show to reactively switch between welcome and chat views
   return (
     <Show when={sessionId()} fallback={<WelcomeScreen />}>
-      <ChatView />
+      <div class="flex h-full">
+        <div class="flex-1 min-w-0">
+          <ChatView />
+        </div>
+        <SessionSidebar sessionId={sessionId()} />
+      </div>
     </Show>
   )
 }
