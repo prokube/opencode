@@ -193,8 +193,9 @@ export function MCPProvider(props: ParentProps) {
         refresh()
       }
       // Also refresh when server reconnects (after config change causes restart)
+      // Small delay to ensure backend has fully initialized
       if (event.type === "server.connected") {
-        refresh()
+        setTimeout(() => refresh(), 500)
       }
     })
 
