@@ -158,7 +158,11 @@ export function MCPProvider(props: ParentProps) {
       await client.global.config.update({ config: {} })
       console.log("[MCP] Triggered backend restart")
 
-      // Refresh will happen automatically via server.connected event
+      // Wait for backend to restart and refresh
+      // The server.connected event should also trigger a refresh, but we do it here too for reliability
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await refresh()
+      console.log("[MCP] Refreshed after restart")
     } catch (e) {
       console.error("[MCP] Failed to remove server:", name, e)
       throw e
