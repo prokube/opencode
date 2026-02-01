@@ -102,8 +102,12 @@ export function Session() {
   const [pendingQuestion, setPendingQuestion] = createSignal<QuestionRequest | null>(null)
 
   let messagesEndRef: HTMLDivElement | undefined
+  let messagesContainerRef: HTMLDivElement | undefined
   let inputRef: HTMLTextAreaElement | undefined
   let slashPopoverRef: HTMLDivElement | undefined
+
+  // Track if user has scrolled up (to disable auto-scroll during streaming)
+  const [userScrolledUp, setUserScrolledUp] = createSignal(false)
 
 
   // Base slash commands (static ones)
@@ -561,11 +565,33 @@ export function Session() {
   }
 
   // Auto-scroll to bottom when messages change or processing state changes
-  function scrollToBottom() {
+  function scrollToBottom(force = false) {
+    // Don't auto-scroll if user has manually scrolled up (unless forced)
+    if (userScrolledUp() && !force) return
+
     // Use requestAnimationFrame to ensure DOM has updated
     requestAnimationFrame(() => {
       messagesEndRef?.scrollIntoView({ behavior: "smooth" })
     })
+  }
+
+  // Check if user is near the bottom of the scroll container
+  function isNearBottom(): boolean {
+    if (!messagesContainerRef) return true
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef
+    // Consider "near bottom" if within 100px of the bottom
+    return scrollHeight - scrollTop - clientHeight < 100
+  }
+
+  // Handle scroll events to detect when user scrolls up
+  function handleScroll() {
+    if (isNearBottom()) {
+      // User scrolled back to bottom, re-enable auto-scroll
+      setUserScrolledUp(false)
+    } else {
+      // User scrolled up, disable auto-scroll
+      setUserScrolledUp(true)
+    }
   }
 
   createEffect(() => {
@@ -578,10 +604,10 @@ export function Session() {
     scrollToBottom()
   })
 
-  // Also scroll on initial load
+  // Also scroll on initial load (forced, ignores userScrolledUp)
   onMount(() => {
     // Scroll after a short delay to ensure content is rendered
-    setTimeout(scrollToBottom, 100)
+    setTimeout(() => scrollToBottom(true), 100)
   })
 
   // Focus input on mount
@@ -603,6 +629,7 @@ export function Session() {
     setError(null)
     setLoading(true)
     setInput("")
+    setUserScrolledUp(false) // Reset scroll state when sending new message
 
     // Optimistic update
     const userMessage: DisplayMessage = {
@@ -868,7 +895,12 @@ export function Session() {
         </header>
 
         {/* Messages */}
-        <div class="flex-1 overflow-y-auto p-6 space-y-4" style={{ background: "var(--background-stronger)" }}>
+        <div
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+          class="flex-1 overflow-y-auto p-6 space-y-4"
+          style={{ background: "var(--background-stronger)" }}
+        >
           {/* Loading history indicator */}
           <Show when={loadingHistory()}>
             <div class="flex flex-col items-center justify-center h-full text-center">
