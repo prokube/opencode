@@ -147,13 +147,32 @@ export async function handleProkubeEndpoint(
         return Response.json({ error: "Config file not found" }, { status: 404 })
       }
 
-      // Read and parse config (strip comments for JSONC)
+      // Read and parse config
       const content = await fs.promises.readFile(configPath, "utf-8")
-      const jsonContent = content
-        .replace(/\/\/.*$/gm, "") // Remove single-line comments
-        .replace(/\/\*[\s\S]*?\*\//g, "") // Remove multi-line comments
 
-      const config = JSON.parse(jsonContent)
+      // Try parsing as JSON first, then strip comments if it fails
+      let config: Record<string, unknown>
+      try {
+        config = JSON.parse(content)
+      } catch {
+        // Strip comments more carefully - only match // at start of line or after whitespace
+        // (not inside strings like URLs)
+        const jsonContent = content
+          .split("\n")
+          .map((line) => {
+            // Remove trailing comments (// at end of line, but not in strings)
+            // Simple heuristic: if line has even number of quotes before //, it's a comment
+            const commentMatch = line.match(/^([^"]*(?:"[^"]*"[^"]*)*)\s*\/\//)
+            if (commentMatch) {
+              return commentMatch[1]
+            }
+            return line
+          })
+          .join("\n")
+          .replace(/\/\*[\s\S]*?\*\//g, "") // Remove multi-line comments
+
+        config = JSON.parse(jsonContent)
+      }
 
       // Remove the MCP server
       if (config.mcp && config.mcp[serverName]) {
