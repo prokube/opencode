@@ -52,7 +52,7 @@ interface MCPContextValue {
 const MCPContext = createContext<MCPContextValue>()
 
 export function MCPProvider(props: ParentProps) {
-  const { client } = useSDK()
+  const { client, url } = useSDK()
   const events = useEvents()
   const [servers, setServers] = createStore<Record<string, MCPStatus>>({})
   const [loading, setLoading] = createSignal(true)
@@ -140,15 +140,17 @@ export function MCPProvider(props: ParentProps) {
         // Ignore disconnect errors - server might not be connected
       })
 
-      // Remove from global config by setting the server to null
-      // (The backend does a deep merge, so we need to explicitly null the key)
-      await client.global.config.update({
-        config: {
-          mcp: {
-            [name]: null as unknown as McpConfig,
-          },
-        },
+      // Remove from global config using prokube endpoint
+      // (We can't use the SDK because the backend does a deep merge and doesn't support deletion)
+      const response = await fetch(`${url}/api/prokube/mcp/${encodeURIComponent(name)}`, {
+        method: "DELETE",
       })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(error.error || "Failed to delete MCP server")
+      }
+
       console.log("[MCP] Server removed from global config")
 
       await refresh()

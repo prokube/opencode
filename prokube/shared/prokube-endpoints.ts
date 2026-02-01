@@ -123,6 +123,58 @@ export async function handleProkubeEndpoint(
     }
   }
 
+  // DELETE /api/prokube/mcp/:name - Remove an MCP server from global config
+  if (path.startsWith("/api/prokube/mcp/") && method === "DELETE") {
+    const serverName = path.replace("/api/prokube/mcp/", "")
+    if (!serverName) {
+      return Response.json({ error: "server name is required" }, { status: 400 })
+    }
+
+    console.log("[Prokube] Deleting MCP server:", serverName)
+
+    try {
+      // Find the global config file
+      const homeDir = process.env.HOME || "/home/jovyan"
+      const configDir = process.env.OPENCODE_CONFIG_DIR || nodePath.join(homeDir, ".config", "opencode")
+
+      // Try both .jsonc and .json
+      let configPath = nodePath.join(configDir, "opencode.jsonc")
+      if (!fs.existsSync(configPath)) {
+        configPath = nodePath.join(configDir, "opencode.json")
+      }
+
+      if (!fs.existsSync(configPath)) {
+        return Response.json({ error: "Config file not found" }, { status: 404 })
+      }
+
+      // Read and parse config (strip comments for JSONC)
+      const content = await fs.promises.readFile(configPath, "utf-8")
+      const jsonContent = content
+        .replace(/\/\/.*$/gm, "") // Remove single-line comments
+        .replace(/\/\*[\s\S]*?\*\//g, "") // Remove multi-line comments
+
+      const config = JSON.parse(jsonContent)
+
+      // Remove the MCP server
+      if (config.mcp && config.mcp[serverName]) {
+        delete config.mcp[serverName]
+        console.log("[Prokube] Removed MCP server from config:", serverName)
+      } else {
+        console.log("[Prokube] MCP server not found in config:", serverName)
+        return Response.json({ error: "Server not found in config" }, { status: 404 })
+      }
+
+      // Write back (as plain JSON since we stripped comments)
+      await fs.promises.writeFile(configPath, JSON.stringify(config, null, 2))
+      console.log("[Prokube] Config saved")
+
+      return Response.json({ success: true })
+    } catch (e) {
+      console.error("[Prokube] mcp delete error:", e)
+      return Response.json({ error: String(e) }, { status: 500 })
+    }
+  }
+
   // Not a prokube endpoint
   return undefined
 }
