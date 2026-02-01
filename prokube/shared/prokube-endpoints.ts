@@ -175,8 +175,9 @@ export async function handleProkubeEndpoint(
       }
 
       // Remove the MCP server
-      if (config.mcp && config.mcp[serverName]) {
-        delete config.mcp[serverName]
+      const mcpConfig = config.mcp as Record<string, unknown> | undefined
+      if (mcpConfig && mcpConfig[serverName]) {
+        delete mcpConfig[serverName]
         console.log("[Prokube] Removed MCP server from config:", serverName)
       } else {
         console.log("[Prokube] MCP server not found in config:", serverName)

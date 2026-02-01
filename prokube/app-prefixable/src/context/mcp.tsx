@@ -153,7 +153,12 @@ export function MCPProvider(props: ParentProps) {
 
       console.log("[MCP] Server removed from global config")
 
-      await refresh()
+      // Trigger a backend restart by updating config (this causes server.instance.disposed)
+      // The backend will reload the config file which now has the server removed
+      await client.global.config.update({ config: {} })
+      console.log("[MCP] Triggered backend restart")
+
+      // Refresh will happen automatically via server.connected event
     } catch (e) {
       console.error("[MCP] Failed to remove server:", name, e)
       throw e
