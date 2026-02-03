@@ -42,12 +42,15 @@ export function Settings() {
   const [oauthCode, setOauthCode] = createSignal("")
   const [codeCopied, setCodeCopied] = createSignal(false)
 
-  // Git SSH Key state - read-only, just display existing keys
-  const [sshKeyName, setSshKeyName] = createSignal<string | null>(null) // e.g. "id_ed25519"
-  const [sshKeyContent, setSshKeyContent] = createSignal<string | null>(null) // public key content
+  // Git SSH Key state - read-only, display all existing keys
+  interface SshKey {
+    name: string // e.g. "id_ed25519"
+    content: string // public key content
+  }
+  const [sshKeys, setSshKeys] = createSignal<SshKey[]>([])
   const [sshKeyLoading, setSshKeyLoading] = createSignal(false)
   const [sshKeyError, setSshKeyError] = createSignal<string | null>(null)
-  const [sshKeyCopied, setSshKeyCopied] = createSignal(false)
+  const [sshKeyCopied, setSshKeyCopied] = createSignal<string | null>(null) // tracks which key was copied
   const [sshCommandCopied, setSshCommandCopied] = createSignal(false)
   const [sshKeyLoaded, setSshKeyLoaded] = createSignal(false)
 
@@ -187,14 +190,15 @@ export function Settings() {
     return str.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]/g, "")
   }
 
-  // Load SSH key - read-only, find first available key
+  // Load SSH keys - read-only, find all available keys
   async function loadSshKey() {
     setSshKeyLoading(true)
     setSshKeyError(null)
     console.log("[loadSshKey] Starting")
     try {
-      // Try common key names in order of preference
+      // Try common key names
       const keyNames = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"]
+      const foundKeys: SshKey[] = []
 
       for (const keyName of keyNames) {
         const content = await runPtyCommand(`cat ~/.ssh/${keyName}.pub 2>/dev/null`)
@@ -209,31 +213,25 @@ export function Settings() {
 
         if (keyContent) {
           console.log("[loadSshKey] Found key:", keyName)
-          setSshKeyName(keyName)
-          setSshKeyContent(keyContent)
-          return
+          foundKeys.push({ name: keyName, content: keyContent })
         }
       }
 
-      // No key found
-      console.log("[loadSshKey] No SSH key found")
-      setSshKeyName(null)
-      setSshKeyContent(null)
+      console.log("[loadSshKey] Total keys found:", foundKeys.length)
+      setSshKeys(foundKeys)
     } catch (e) {
-      console.error("[loadSshKey] Failed to load SSH key:", e)
-      setSshKeyError("Failed to check for SSH key")
+      console.error("[loadSshKey] Failed to load SSH keys:", e)
+      setSshKeyError("Failed to check for SSH keys")
     } finally {
       setSshKeyLoading(false)
     }
   }
 
-  async function copySshKey() {
-    const key = sshKeyContent()
-    if (!key) return
+  async function copySshKey(keyName: string, keyContent: string) {
     try {
-      await navigator.clipboard.writeText(key)
-      setSshKeyCopied(true)
-      setTimeout(() => setSshKeyCopied(false), 2000)
+      await navigator.clipboard.writeText(keyContent)
+      setSshKeyCopied(keyName)
+      setTimeout(() => setSshKeyCopied(null), 2000)
     } catch (e) {
       console.error("Failed to copy:", e)
     }
@@ -888,11 +886,11 @@ export function Settings() {
                     </div>
                   </Show>
 
-                  {/* No key found */}
-                  <Show when={!sshKeyLoading() && !sshKeyContent()}>
+                  {/* No keys found */}
+                  <Show when={!sshKeyLoading() && sshKeys().length === 0}>
                     <div class="space-y-4">
                       <p class="text-sm" style={{ color: "var(--text-weak)" }}>
-                        No SSH key found. Generate one using the terminal:
+                        No SSH keys found. Generate one using the terminal:
                       </p>
 
                       {/* Command to copy */}
@@ -934,46 +932,52 @@ export function Settings() {
                     </div>
                   </Show>
 
-                  {/* Key found */}
-                  <Show when={!sshKeyLoading() && sshKeyContent()}>
+                  {/* Keys found */}
+                  <Show when={!sshKeyLoading() && sshKeys().length > 0}>
                     <div class="space-y-4">
                       <div class="flex items-center gap-2 text-sm" style={{ color: "var(--text-base)" }}>
                         <Check class="w-4 h-4" style={{ color: "var(--icon-success-base)" }} />
-                        <span>Key found: <strong>{sshKeyName()}</strong></span>
+                        <span>{sshKeys().length} SSH key{sshKeys().length > 1 ? "s" : ""} found</span>
                       </div>
 
-                      {/* Public Key Display */}
-                      <div>
-                        <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
-                          Public Key
-                        </label>
-                        <div class="relative">
-                          <pre
-                            class="p-3 rounded-md text-xs overflow-x-auto"
-                            style={{
-                              background: "var(--surface-inset)",
-                              color: "var(--text-base)",
-                              "word-break": "break-all",
-                              "white-space": "pre-wrap",
-                            }}
-                          >
-                            {sshKeyContent()}
-                          </pre>
-                          <button
-                            onClick={copySshKey}
-                            class="absolute top-2 right-2 p-1.5 rounded transition-colors"
-                            style={{
-                              background: "var(--background-base)",
-                              border: "1px solid var(--border-base)",
-                              color: sshKeyCopied() ? "var(--icon-success-base)" : "var(--icon-base)",
-                            }}
-                            title="Copy to clipboard"
-                          >
-                            <Show when={sshKeyCopied()} fallback={<Copy class="w-4 h-4" />}>
-                              <Check class="w-4 h-4" />
-                            </Show>
-                          </button>
-                        </div>
+                      {/* All Keys Display */}
+                      <div class="space-y-3">
+                        <For each={sshKeys()}>
+                          {(key) => (
+                            <div>
+                              <label class="block text-sm font-medium mb-2" style={{ color: "var(--text-base)" }}>
+                                {key.name}.pub
+                              </label>
+                              <div class="relative">
+                                <pre
+                                  class="p-3 rounded-md text-xs overflow-x-auto"
+                                  style={{
+                                    background: "var(--surface-inset)",
+                                    color: "var(--text-base)",
+                                    "word-break": "break-all",
+                                    "white-space": "pre-wrap",
+                                  }}
+                                >
+                                  {key.content}
+                                </pre>
+                                <button
+                                  onClick={() => copySshKey(key.name, key.content)}
+                                  class="absolute top-2 right-2 p-1.5 rounded transition-colors"
+                                  style={{
+                                    background: "var(--background-base)",
+                                    border: "1px solid var(--border-base)",
+                                    color: sshKeyCopied() === key.name ? "var(--icon-success-base)" : "var(--icon-base)",
+                                  }}
+                                  title="Copy to clipboard"
+                                >
+                                  <Show when={sshKeyCopied() === key.name} fallback={<Copy class="w-4 h-4" />}>
+                                    <Check class="w-4 h-4" />
+                                  </Show>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </For>
                       </div>
 
                       <Button onClick={loadSshKey} variant="secondary" size="sm">
