@@ -1,5 +1,5 @@
 import { createContext, useContext, createSignal, onMount, type ParentProps, createMemo } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { useSDK } from "./sdk"
 import { useEvents } from "./events"
 
@@ -61,7 +61,9 @@ export function MCPProvider(props: ParentProps) {
     try {
       const res = await client.mcp.status()
       if (res.data) {
-        setServers(res.data as Record<string, MCPStatus>)
+        // Use reconcile to properly handle deleted servers
+        // Without reconcile, removed keys would persist in the store
+        setServers(reconcile(res.data as Record<string, MCPStatus>))
       }
     } catch (e) {
       console.error("[MCP] Failed to fetch status:", e)
