@@ -1,6 +1,5 @@
-import { createSignal, Show } from "solid-js"
+import { createSignal } from "solid-js"
 import { useNavigate } from "@solidjs/router"
-import { useBasePath } from "../context/base-path"
 import { base64Encode } from "../utils/path"
 import { Folder, GitBranch, Plus } from "lucide-solid"
 import { ProjectDialog } from "../components/project-dialog"
@@ -148,7 +147,7 @@ export function ProjectPicker() {
         </div>
 
         {/* Action Cards */}
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <ActionCard
             icon={Folder}
             title="Open Project"
@@ -177,6 +176,7 @@ export function ProjectPicker() {
         onSelect={handleProjectSelect}
         initialView={dialogView()}
       />
+
     </div>
   )
 }
