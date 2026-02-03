@@ -190,18 +190,28 @@ export function Settings() {
     return str.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b\[\?[0-9;]*[a-zA-Z]/g, "")
   }
 
-  // Load SSH keys - read-only, find all available keys
+  // Load SSH keys - read-only, find all .pub files in ~/.ssh/
   async function loadSshKey() {
     setSshKeyLoading(true)
     setSshKeyError(null)
     console.log("[loadSshKey] Starting")
     try {
-      // Try common key names
-      const keyNames = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"]
+      // List all .pub files in ~/.ssh/
+      const lsOutput = await runPtyCommand(`ls -1 ~/.ssh/*.pub 2>/dev/null`)
+      const cleanLsOutput = stripAnsi(lsOutput)
+
+      // Extract filenames from ls output
+      const pubFiles = cleanLsOutput
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.endsWith(".pub") && !line.includes("*"))
+
+      console.log("[loadSshKey] Found .pub files:", pubFiles)
+
       const foundKeys: SshKey[] = []
 
-      for (const keyName of keyNames) {
-        const content = await runPtyCommand(`cat ~/.ssh/${keyName}.pub 2>/dev/null`)
+      for (const pubFile of pubFiles) {
+        const content = await runPtyCommand(`cat "${pubFile}" 2>/dev/null`)
         const cleanContent = stripAnsi(content)
         const keyContent = cleanContent
           .split("\n")
@@ -212,10 +222,23 @@ export function Settings() {
           ?.trim()
 
         if (keyContent) {
+          // Extract just the filename without path and .pub extension
+          const keyName = pubFile.split("/").pop()?.replace(/\.pub$/, "") || pubFile
           console.log("[loadSshKey] Found key:", keyName)
           foundKeys.push({ name: keyName, content: keyContent })
         }
       }
+
+      // Sort keys: standard names first, then alphabetically
+      const standardOrder = ["id_ed25519", "id_ecdsa", "id_rsa", "id_dsa"]
+      foundKeys.sort((a, b) => {
+        const aIdx = standardOrder.indexOf(a.name)
+        const bIdx = standardOrder.indexOf(b.name)
+        if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx
+        if (aIdx >= 0) return -1
+        if (bIdx >= 0) return 1
+        return a.name.localeCompare(b.name)
+      })
 
       console.log("[loadSshKey] Total keys found:", foundKeys.length)
       setSshKeys(foundKeys)
