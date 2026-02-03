@@ -71,6 +71,7 @@ export function Session() {
     const id = params.id
     console.log("[Session] URL param changed:", id)
     setSessionId(id)
+    setPendingUserMessageText(null) // Clear pending text on session change
     if (id) {
       // Immediately clear old messages and show loading state
       setMessages([])
@@ -100,6 +101,9 @@ export function Session() {
   const [showMCPAddDialog, setShowMCPAddDialog] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   const [pendingQuestion, setPendingQuestion] = createSignal<QuestionRequest | null>(null)
+
+  // Track pending user message to match backend echoes
+  const [pendingUserMessageText, setPendingUserMessageText] = createSignal<string | null>(null)
 
   let messagesEndRef: HTMLDivElement | undefined
   let messagesContainerRef: HTMLDivElement | undefined
@@ -447,7 +451,26 @@ export function Session() {
           const msgIndex = prev.findIndex((m) => m.id === part.messageID)
           console.log("[Session] Current messages:", prev.length, "msgIndex:", msgIndex)
           if (msgIndex === -1) {
-            console.log("[Session] Creating new message with part")
+            // Check if this is the backend echo of the user message we just sent
+            const pendingText = pendingUserMessageText()
+            const partText = part.type === "text" ? (part as { text?: string }).text : null
+
+            if (pendingText && partText && partText.trim() === pendingText.trim()) {
+              // This is the user message echo - find and update the optimistic user message
+              console.log("[Session] Matched pending user message, updating optimistic message ID")
+              setPendingUserMessageText(null) // Clear pending text
+
+              // Find the last user message (our optimistic one) and update its ID
+              const lastUserIndex = prev.findLastIndex((m) => m.role === "user")
+              if (lastUserIndex !== -1) {
+                return prev.map((m, i) =>
+                  i === lastUserIndex ? { ...m, id: part.messageID, parts: [part] } : m
+                )
+              }
+            }
+
+            // Not a user message echo - create new assistant message
+            console.log("[Session] Creating new assistant message with part")
             return [
               ...prev,
               {
@@ -473,6 +496,7 @@ export function Session() {
         const props = event.properties as { sessionID: string; status: { type: string } }
         if (props.sessionID === id && props.status.type === "idle") {
           console.log("[Session] Status idle, reloading...")
+          setPendingUserMessageText(null) // Clear any pending user message
           loadMessages(id)
           setProcessing(false)
         } else if (props.sessionID === id) {
@@ -630,6 +654,9 @@ export function Session() {
     setLoading(true)
     setInput("")
     setUserScrolledUp(false) // Reset scroll state when sending new message
+
+    // Track pending user message text to match backend echoes
+    setPendingUserMessageText(text)
 
     // Optimistic update
     const userMessage: DisplayMessage = {
