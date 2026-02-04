@@ -371,58 +371,10 @@ export function Session() {
     }
   }
 
-  // Poll for status and reload messages when done
-  async function waitForCompletion(id: string) {
-    console.log("[Session] Waiting for completion...")
+  // Start processing state - SSE events will handle updates and completion
+  function startProcessing() {
+    console.log("[Session] Starting processing, relying on SSE events")
     setProcessing(true)
-
-    // Give the server a moment to start processing
-    await new Promise((r) => setTimeout(r, 1000))
-
-    for (let i = 0; i < 120; i++) {
-      await new Promise((r) => setTimeout(r, 500))
-
-      try {
-        const res = await client.session.status({})
-        console.log("[Session] Status poll", i, "- response:", res.data)
-        const statuses = res.data as Record<string, { type: string }> | undefined
-        if (!statuses || typeof statuses !== "object") {
-          console.log("[Session] No statuses yet, continuing...")
-          continue
-        }
-
-        const status = statuses[id]
-        console.log("[Session] Status for", id, ":", status?.type)
-
-        // If session has a busy/retry status, continue polling
-        if (status && (status.type === "busy" || status.type === "retry")) {
-          continue
-        }
-
-        // Session is idle or not found - load messages
-        console.log("[Session] Status idle/not found, loading messages...")
-        await loadMessages(id)
-
-        const msgs = messages()
-        const hasAssistantResponse = msgs.some((m) => m.role === "assistant")
-
-        if (hasAssistantResponse) {
-          console.log("[Session] Complete, found", msgs.length, "messages")
-          setProcessing(false)
-          return
-        }
-
-        // No assistant response yet - might be an error or still processing
-        console.log("[Session] No assistant response yet after", i, "polls")
-      } catch (e) {
-        console.error("[Session] Status check failed:", e)
-      }
-    }
-
-    // Timeout - reload anyway
-    console.log("[Session] Timeout after 120 polls, reloading messages...")
-    await loadMessages(id)
-    setProcessing(false)
   }
 
   // Subscribe to events for real-time updates
@@ -657,6 +609,12 @@ export function Session() {
       return
     }
 
+    // Check if the selected model's provider is connected
+    if (!providers.connected.includes(providers.selectedModel.providerID)) {
+      setError(`Provider "${providers.selectedModel.providerID}" is not connected. Please configure it in Settings.`)
+      return
+    }
+
     setError(null)
     setLoading(true)
     setInput("")
@@ -707,8 +665,8 @@ export function Session() {
       const promptRes = await client.session.promptAsync(promptPayload)
       console.log("[Session] Prompt response:", promptRes)
 
-      // Start polling for completion (SSE might not work through proxy)
-      waitForCompletion(id)
+      // Start processing - SSE events will handle updates and completion
+      startProcessing()
     } catch (err) {
       console.error("[Session] Error sending message:", err)
       setError(`Failed to send message: ${err instanceof Error ? err.message : String(err)}`)
