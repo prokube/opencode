@@ -461,7 +461,14 @@ export function Session() {
               setPendingUserMessageText(null) // Clear pending text
 
               // Find the last user message (our optimistic one) and update its ID
-              const lastUserIndex = prev.findLastIndex((m) => m.role === "user")
+              // Use reverse loop instead of findLastIndex for broader compatibility
+              let lastUserIndex = -1
+              for (let i = prev.length - 1; i >= 0; i--) {
+                if (prev[i].role === "user") {
+                  lastUserIndex = i
+                  break
+                }
+              }
               if (lastUserIndex !== -1) {
                 return prev.map((m, i) =>
                   i === lastUserIndex ? { ...m, id: part.messageID, parts: [part] } : m
